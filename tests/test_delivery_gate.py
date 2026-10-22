@@ -420,24 +420,26 @@ class SourceDriftTests(unittest.TestCase):
         cls.dispatch = Path(SOURCE, "src/solo_notifications/dispatch.py").read_text(encoding="utf-8")
 
     def test_max_attempts(self) -> None:
-        self.assertEqual(int(re.search(r"^MAX_ATTEMPTS = (\d+)", self.dispatch, re.M).group(1)), policy.MAX_ATTEMPTS)
+        self.assertEqual(int(re.search(r"^MAX_ATTEMPTS = (\d+)", self.dispatch, re.MULTILINE).group(1)), policy.MAX_ATTEMPTS)
 
     def test_dedupe_construction(self) -> None:
         body = re.search(r"def dedupe_key\(\*parts: Any\) -> str:\n(?:    \"\"\".*\"\"\"\n)?    (return .+)\n",
                          self.dispatch).group(1)
         namespace: dict = {}
-        exec("import hashlib, json\nfrom typing import Any\ndef dedupe_key(*parts):\n    " + body, namespace)
+        exec(  # noqa: S102 - runs the dedupe_key body quoted from the policy doc against the golden keys
+            "import hashlib, json\nfrom typing import Any\ndef dedupe_key(*parts):\n    " + body, namespace
+        )
         for item in fixture["retry_idempotency"]["golden_dedupe_keys"]:
             self.assertEqual(namespace["dedupe_key"](*item["parts"]), item["key"])
 
     def test_delivery_outcomes_and_console_rule(self) -> None:
-        literal = re.search(r"class Delivery\(BaseModel\):.*?outcome: Literal\[([^\]]+)\]", self.app, re.S).group(1)
+        literal = re.search(r"class Delivery\(BaseModel\):.*?outcome: Literal\[([^\]]+)\]", self.app, re.DOTALL).group(1)
         self.assertEqual(tuple(re.findall(r'"(\w+)"', literal)), policy.DELIVERY_OUTCOMES)
         self.assertIn('"console_is_not_delivery"', self.app)
 
     def test_queue_fields_and_limits(self) -> None:
-        model = re.search(r"class NotificationCreate\(BaseModel\):(.*?)\nclass ", self.app, re.S).group(1)
-        fields = set(re.findall(r"^    (\w+):", model, re.M)) - {"model_config", "legacy_id", "sent_at"}
+        model = re.search(r"class NotificationCreate\(BaseModel\):(.*?)\nclass ", self.app, re.DOTALL).group(1)
+        fields = set(re.findall(r"^    (\w+):", model, re.MULTILINE)) - {"model_config", "legacy_id", "sent_at"}
         queue = next(o for o in consumer["operations"] if o["id"] == "queue")
         self.assertEqual(fields, set(queue["request_required"]) | set(queue["request_optional"]))
         self.assertIn("dedupe_key: str | None = Field(default=None, min_length=8, max_length=200)", model)
