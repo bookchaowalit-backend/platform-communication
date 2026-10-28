@@ -206,3 +206,26 @@ upstream checkout), against PostgreSQL 16 via `pgserver`, Python 3.12. The new
 tests in `runtime_tests/test_opt_out.py` failed first (11 of 11, then the two
 readiness cases) and pass now. Ruff clean, including the 32 findings the branch
 had against main's Ruff gate.
+
+## Staging plan (not executed) — first possible date 2026-11-01
+
+Blocked until then: the Neon `empire-platform` free compute quota is exhausted
+until 2026-11-01 and Railway deploys stop at an approval step. Each step below
+needs the owner's go; nothing has been deployed.
+
+1. Database: a dedicated database for this service (no shared tables), a DDL role
+   for `migrate` and a separate NOSUPERUSER NOBYPASSRLS runtime role with the grants
+   above (`message_outbox` SELECT/INSERT/UPDATE, `message_opt_out` SELECT/INSERT,
+   history SELECT). Connection strings go to Infisical `/platform-communication`.
+2. Sender: verify a sending domain in Resend (owner, dashboard: the Infisical
+   `/resend` key is send-only and cannot list domains) and set `RESEND_FROM`.
+3. Image: build the `wheelhouse/` (this wheel plus `platform-backend-core` at the
+   CI-pinned commit and their dependencies) and deploy one Railway service for
+   `serve` and one for `worker` with `COMMUNICATION_WORKSPACE_ID`, JWT issuer
+   `empire-platform`, `RESEND_API_KEY`, `RESEND_FROM`. Run `migrate` once with the
+   DDL role. Approve the pending deployment through GraphQL.
+4. Smoke test: `/readyz` 200; one `POST /v1/messages` to an owner address with a
+   service token (`messages:write`) reaches `delivered`; a replay returns the same
+   id; an opt-out for a second owner address suppresses its message with 0 attempts.
+5. Then add Sentry and the uptime monitor, and only after that move a first
+   consumer (the portfolio contact form) with a rollback to its current path.
