@@ -180,3 +180,27 @@ def test_readiness_requires_forced_rls_on_the_opt_out_table(database):
     with psycopg.connect(temp.admin_dsn) as admin:
         admin.execute('ALTER TABLE message_opt_out NO FORCE ROW LEVEL SECURITY')
     assert s.ready() is False
+
+
+def test_reused_event_id_for_a_different_address_is_a_conflict(database):
+    from platform_communication.store import Conflict
+    db,_=database;s=OutboxStore(db);w=uuid4()
+    s.record_opt_out(w,'email','one@example.invalid','owner.global','evt-shared')
+    with pytest.raises(Conflict):s.record_opt_out(w,'email','two@example.invalid','owner.global','evt-shared')
+    with pytest.raises(Conflict):s.record_opt_out(w,'*','one@example.invalid','owner.global','evt-shared')
+    assert s.record_opt_out(w,'email','one@example.invalid','owner.global','evt-shared')=='existing'
+
+
+@pytest.mark.parametrize('subject',['   ','a\x7fb','a\u0085b','a b','a b'])
+def test_subject_rejects_blank_and_unicode_control_or_separator(database,subject):
+    db,_=database;s=OutboxStore(db)
+    with pytest.raises(ValueError):s.create(uuid4(),'bad-subject','email','a@example.invalid','hi','plain',subject=subject)
+
+
+def test_fingerprint_without_subject_keeps_the_pre_subject_form():
+    import hashlib
+
+    from platform_communication.store import fingerprint
+    legacy=hashlib.sha256(json.dumps(['email','a@example.invalid','hi','plain',3],separators=(',',':')).encode()).hexdigest()
+    assert fingerprint('email','a@example.invalid','hi','plain',3,None)==legacy
+    assert fingerprint('email','a@example.invalid','hi','plain',3,'Quote')!=legacy

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import unicodedata
 from uuid import UUID, uuid4
 
 from psycopg.rows import dict_row
@@ -22,6 +23,13 @@ def recipient_hash(channel,recipient):
     return hashlib.sha256(('recipient:'+(recipient.lower() if channel=='email' else recipient)).encode()).hexdigest()
 def valid_recipient(channel,recipient):
     return channel in PATTERNS and isinstance(recipient,str) and len(recipient)<=512 and bool(re.fullmatch(PATTERNS[channel],recipient))
+def valid_subject(subject):
+    # No Unicode control, format or line/paragraph separator characters, and not blank.
+    return isinstance(subject,str) and 1<=len(subject)<=200 and bool(subject.strip()) and not any(unicodedata.category(x)[0]=='C' or unicodedata.category(x) in ('Zl','Zp') for x in subject)
+def fingerprint(channel,recipient,body,template,max_attempts,subject):
+    # Without a subject the list keeps its pre-subject shape, so earlier keys still replay.
+    parts=[channel,recipient,body,template,max_attempts]+([] if subject is None else [subject])
+    return hashlib.sha256(json.dumps(parts,separators=(',',':')).encode()).hexdigest()
 class OutboxStore:
     def __init__(self,database,*,max_pending=10000):
         if type(max_pending) is not int or not 1<=max_pending<=10000:raise ValueError('Invalid capacity')
@@ -33,14 +41,14 @@ class OutboxStore:
         render_template(template,body)
         if template=='html' and channel!='email':raise ValueError('Invalid template')
         if type(max_attempts) is not int or not 1<=max_attempts<=10:raise ValueError('Invalid attempts')
-        if subject is not None and (channel!='email' or not isinstance(subject,str) or not 1<=len(subject)<=200 or any(ord(x)<32 for x in subject)):raise ValueError('Invalid subject')
-        fingerprint=hashlib.sha256(json.dumps([channel,recipient,body,template,max_attempts,subject],separators=(',',':')).encode()).hexdigest()
+        if subject is not None and (channel!='email' or not valid_subject(subject)):raise ValueError('Invalid subject')
+        expected=fingerprint(channel,recipient,body,template,max_attempts,subject)
         with self.db.transaction(workspace) as conn, conn.cursor(row_factory=dict_row) as c:
             c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",('message-capacity:'+str(workspace),))
-            c.execute('INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,subject,body,template,max_attempts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(workspace_id,event_key) DO NOTHING',(workspace,uuid4(),key,fingerprint,channel,recipient,subject,body,template,max_attempts))
+            c.execute('INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,subject,body,template,max_attempts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(workspace_id,event_key) DO NOTHING',(workspace,uuid4(),key,expected,channel,recipient,subject,body,template,max_attempts))
             c.execute(f"UPDATE message_outbox m SET status='suppressed' WHERE event_key=%s AND status='queued' AND {OPTED_OUT}",(key,))
             row=c.execute(f'SELECT {PUBLIC},fingerprint FROM message_outbox WHERE event_key=%s',(key,)).fetchone()
-            if row.pop('fingerprint')!=fingerprint:raise Conflict()
+            if row.pop('fingerprint')!=expected:raise Conflict()
             if c.execute("SELECT count(*) FROM message_outbox WHERE status IN ('queued','leased','sending','uncertain')").fetchone()['count']>self.max_pending:raise QueueFull()
             return row
     def get(self,workspace,id):
@@ -64,7 +72,10 @@ class OutboxStore:
             if c.execute(f"UPDATE message_outbox m SET status='suppressed',attempts=attempts-1,lease_token=NULL,lease_until=NULL WHERE id=%s AND lease_token=%s AND status='leased' AND {OPTED_OUT} RETURNING id",(id,token)).fetchone():return False
             return bool(c.execute("UPDATE message_outbox SET status='sending' WHERE id=%s AND lease_token=%s AND status='leased' AND lease_until>clock_timestamp() RETURNING id",(id,token)).fetchone())
     def record_opt_out(self,workspace,channel,recipient,source,event_id):
-        """``created`` or ``existing``; a replayed event id or an already blocked address changes nothing."""
+        """``created`` or ``existing``; a replayed event id or an already blocked address changes nothing.
+
+        Reusing an event id for a different channel or address raises Conflict instead of
+        reporting ``existing`` for an address that was never blocked."""
         if channel!='*' and channel not in PATTERNS:raise ValueError('Invalid channel')
         channels=list(PATTERNS) if channel=='*' else [channel]
         if not any(valid_recipient(x,recipient) for x in channels):raise ValueError('Invalid recipient')
@@ -73,7 +84,10 @@ class OutboxStore:
         hashed=recipient_hash(next(x for x in channels if valid_recipient(x,recipient)),recipient)
         with self.db.transaction(workspace) as c:
             created=c.execute('INSERT INTO message_opt_out(workspace_id,channel,recipient_hash,source,event_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING channel',(workspace,channel,hashed,source,event_id)).fetchone()
-            return 'created' if created else 'existing'
+            if created:return 'created'
+            same=c.execute('SELECT channel=%s AND recipient_hash=%s FROM message_opt_out WHERE event_id=%s',(channel,hashed,event_id)).fetchone()
+            if same is not None and not same[0]:raise Conflict()
+            return 'existing'
     def finish(self,workspace,id,token,outcome,provider_id=None):
         if outcome not in ['delivered','retry','dead','uncertain']:raise ValueError('Invalid outcome')
         if provider_id is not None and (not isinstance(provider_id,str) or len(provider_id)>256):provider_id=None

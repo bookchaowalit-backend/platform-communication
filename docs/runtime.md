@@ -179,7 +179,8 @@ Implements the BOO-150 rules the owner accepted on 2026-10-16 in this runtime
   or `*` for every channel), `recipient`, `source` (`owner.global`,
   `email.list_unsubscribe`, `provider.blocked`) and an external `event_id`.
   201 `created`, 200 `existing`: a replayed event id or an address that is already
-  blocked changes nothing. Validation errors are generic 422.
+  blocked changes nothing; an event id reused for another channel or address is
+  409. Validation errors are generic 422.
 - `message_opt_out` stores only `sha256("recipient:" + address)` (emails lowercased),
   never the address. Forced RLS per workspace; readiness requires it and runtime
   SELECT/INSERT on the table.
@@ -191,8 +192,10 @@ Implements the BOO-150 rules the owner accepted on 2026-10-16 in this runtime
 - A Telegram 403 whose body says `bot was blocked by the user` is dead and records a
   `provider.blocked` opt-out (event id `provider:<message id>`), so later sends to
   that chat are suppressed. Other 403s are dead only.
-- Email takes an optional `subject` (1..200 characters, no control characters,
-  email only, part of the idempotency fingerprint); without it Resend still gets
+- Email takes an optional `subject` (1..200 characters, not blank, no Unicode
+  control, format or line/paragraph separator characters,
+  email only, part of the idempotency fingerprint only when set, so keys written
+  without one still replay); without it Resend still gets
   `Notification`.
 - `max_attempts` defaults to 3, the accepted retry policy.
 

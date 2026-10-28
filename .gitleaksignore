@@ -1,0 +1,5 @@
+# Synthetic gate fixture (BOO-150): golden dedupe keys are sha256 of synthetic parts, line 147 is a header name.
+f6d3db992a4cca95393f55a38f7f5127d73fffbd:fixtures/gates/communication-delivery.json:generic-api-key:147
+f6d3db992a4cca95393f55a38f7f5127d73fffbd:fixtures/gates/communication-delivery.json:generic-api-key:449
+f6d3db992a4cca95393f55a38f7f5127d73fffbd:fixtures/gates/communication-delivery.json:generic-api-key:457
+f6d3db992a4cca95393f55a38f7f5127d73fffbd:fixtures/gates/communication-delivery.json:generic-api-key:465
