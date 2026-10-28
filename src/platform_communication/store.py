@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from psycopg.rows import dict_row
 
 from .adapters import render_template
+from .keys import Keys
 from .migrations import MIGRATIONS
 
 
@@ -15,12 +16,12 @@ class QueueFull(Exception):pass
 PUBLIC='id,channel,recipient,subject,body,template,status,attempts,max_attempts,run_at,created_at'
 PATTERNS={'email':r'[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}','sms':r'\+[1-9][0-9]{7,14}','push':r'[A-Za-z0-9_:.-]{10,512}','telegram':r'-?[0-9]{1,20}'}
 OPT_OUT_SOURCES=['owner.global','email.list_unsubscribe','provider.blocked']
-# Opt-outs hold only a hash of the normalized address (emails compare case-insensitively).
-# The SQL form must stay identical to recipient_hash() below.
+# Event ids the service writes itself; API callers cannot claim them ahead of time.
+RESERVED_EVENT_PREFIXES=('unsubscribe:','provider:')
+# Opt-outs hold only a keyed hash of the normalized address (see keys.Keys); each message stores
+# the same hash, so SQL compares stored values and never needs the key.
 OPTED_OUT="""EXISTS(SELECT 1 FROM message_opt_out o WHERE o.workspace_id=m.workspace_id AND o.channel IN (m.channel,'*')
-    AND o.recipient_hash=encode(sha256(convert_to('recipient:'||CASE WHEN m.channel='email' THEN lower(m.recipient) ELSE m.recipient END,'UTF8')),'hex'))"""
-def recipient_hash(channel,recipient):
-    return hashlib.sha256(('recipient:'+(recipient.lower() if channel=='email' else recipient)).encode()).hexdigest()
+    AND o.recipient_hash=m.recipient_hash)"""
 def valid_recipient(channel,recipient):
     return channel in PATTERNS and isinstance(recipient,str) and len(recipient)<=512 and bool(re.fullmatch(PATTERNS[channel],recipient))
 def valid_subject(subject):
@@ -31,9 +32,9 @@ def fingerprint(channel,recipient,body,template,max_attempts,subject):
     parts=[channel,recipient,body,template,max_attempts]+([] if subject is None else [subject])
     return hashlib.sha256(json.dumps(parts,separators=(',',':')).encode()).hexdigest()
 class OutboxStore:
-    def __init__(self,database,*,max_pending=10000):
+    def __init__(self,database,*,keys=None,max_pending=10000):
         if type(max_pending) is not int or not 1<=max_pending<=10000:raise ValueError('Invalid capacity')
-        self.db=database;self.max_pending=max_pending
+        self.db=database;self.max_pending=max_pending;self.keys=keys or Keys.from_env()
     def create(self,workspace,key,channel,recipient,body,template,max_attempts=3,subject=None):
         if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',key):raise ValueError('Invalid key')
         if not valid_recipient(channel,recipient):raise ValueError('Invalid recipient')
@@ -45,7 +46,7 @@ class OutboxStore:
         expected=fingerprint(channel,recipient,body,template,max_attempts,subject)
         with self.db.transaction(workspace) as conn, conn.cursor(row_factory=dict_row) as c:
             c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",('message-capacity:'+str(workspace),))
-            c.execute('INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,subject,body,template,max_attempts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(workspace_id,event_key) DO NOTHING',(workspace,uuid4(),key,expected,channel,recipient,subject,body,template,max_attempts))
+            c.execute('INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,recipient_hash,subject,body,template,max_attempts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(workspace_id,event_key) DO NOTHING',(workspace,uuid4(),key,expected,channel,recipient,self.keys.recipient_hash(channel,recipient),subject,body,template,max_attempts))
             c.execute(f"UPDATE message_outbox m SET status='suppressed' WHERE event_key=%s AND status='queued' AND {OPTED_OUT}",(key,))
             row=c.execute(f'SELECT {PUBLIC},fingerprint FROM message_outbox WHERE event_key=%s',(key,)).fetchone()
             if row.pop('fingerprint')!=expected:raise Conflict()
@@ -71,7 +72,24 @@ class OutboxStore:
             # An opt-out recorded after the claim still wins: suppress instead of sending.
             if c.execute(f"UPDATE message_outbox m SET status='suppressed',attempts=attempts-1,lease_token=NULL,lease_until=NULL WHERE id=%s AND lease_token=%s AND status='leased' AND {OPTED_OUT} RETURNING id",(id,token)).fetchone():return False
             return bool(c.execute("UPDATE message_outbox SET status='sending' WHERE id=%s AND lease_token=%s AND status='leased' AND lease_until>clock_timestamp() RETURNING id",(id,token)).fetchone())
-    def record_opt_out(self,workspace,channel,recipient,source,event_id):
+    def unsubscribe_target(self,token):
+        """(workspace, message) for a valid signed token of an email message, else None."""
+        found=self.keys.read_unsubscribe_token(token)
+        if found is None:return None
+        row=self.get(found[0],found[1])
+        return (found[0],row) if row is not None and row['channel']=='email' else None
+    def unsubscribe(self,token):
+        """Record an RFC 8058 one-click opt-out; False when the token names no email message."""
+        target=self.unsubscribe_target(token)
+        if target is None:return False
+        workspace,row=target
+        event='unsubscribe:'+str(row['id'])
+        try:self.record_opt_out(workspace,'email',row['recipient'],'email.list_unsubscribe',event,internal=True)
+        except Conflict:
+            # The event id is already bound to another address; the click must still block this one.
+            self.record_opt_out(workspace,'email',row['recipient'],'email.list_unsubscribe',event+':'+self.keys.recipient_hash('email',row['recipient'])[:16],internal=True)
+        return True
+    def record_opt_out(self,workspace,channel,recipient,source,event_id,*,internal=False):
         """``created`` or ``existing``; a replayed event id or an already blocked address changes nothing.
 
         Reusing an event id for a different channel or address raises Conflict instead of
@@ -81,7 +99,8 @@ class OutboxStore:
         if not any(valid_recipient(x,recipient) for x in channels):raise ValueError('Invalid recipient')
         if source not in OPT_OUT_SOURCES:raise ValueError('Invalid source')
         if not isinstance(event_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',event_id):raise ValueError('Invalid event')
-        hashed=recipient_hash(next(x for x in channels if valid_recipient(x,recipient)),recipient)
+        if not internal and event_id.startswith(RESERVED_EVENT_PREFIXES):raise ValueError('Invalid event')
+        hashed=self.keys.recipient_hash(next(x for x in channels if valid_recipient(x,recipient)),recipient)
         with self.db.transaction(workspace) as c:
             created=c.execute('INSERT INTO message_opt_out(workspace_id,channel,recipient_hash,source,event_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING channel',(workspace,channel,hashed,source,event_id)).fetchone()
             if created:return 'created'
@@ -107,6 +126,6 @@ class OutboxStore:
             history=c.execute('SELECT version,checksum FROM platform_schema_migrations WHERE namespace=%s ORDER BY version',('communication',)).fetchall()
             if history!=[(m.version,m.checksum) for m in MIGRATIONS]:return False
             row=c.execute("SELECT count(*)=2 AND bool_and(relrowsecurity AND relforcerowsecurity) FROM pg_class WHERE oid IN (to_regclass('message_outbox'),to_regclass('message_opt_out'))").fetchone()
-            c.execute('SELECT status,lease_token,fingerprint,subject FROM message_outbox LIMIT 0')
+            c.execute('SELECT status,lease_token,fingerprint,subject,recipient_hash FROM message_outbox LIMIT 0')
             c.execute('SELECT channel,recipient_hash FROM message_opt_out LIMIT 0')
             return bool(row and row[0])

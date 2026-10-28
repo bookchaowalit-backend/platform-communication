@@ -199,16 +199,37 @@ Implements the BOO-150 rules the owner accepted on 2026-10-16 in this runtime
   `Notification`.
 - `max_attempts` defaults to 3, the accepted retry policy.
 
-Not done here: an RFC 8058 `List-Unsubscribe` header and its public one-click
-endpoint (needs a signed per-message token), routing LINE `unfollow` from
-`/api/webhook/line`, and a `recipient_ref` model. Callers record email
-unsubscribes through `POST /v1/opt-outs` until then.
+Not done here: routing LINE `unfollow` from `/api/webhook/line` and a
+`recipient_ref` model.
 
 Verification: 111 passed, 5 skipped (server-parity cases that need the pinned
 upstream checkout), against PostgreSQL 16 via `pgserver`, Python 3.12. The new
 tests in `runtime_tests/test_opt_out.py` failed first (11 of 11, then the two
 readiness cases) and pass now. Ruff clean, including the 32 findings the branch
 had against main's Ruff gate.
+
+## Keyed hashes and one-click unsubscribe — 2026-10-29
+
+- `COMMUNICATION_SECRET` (at least 32 characters, Infisical
+  `/platform-communication`) is required by `serve` and `worker`; without it the
+  store refuses to start. Two keys are derived from it: one for recipient hashes,
+  one for unsubscribe tokens.
+- Recipient hashes are HMAC-SHA256 of the normalized address (migration `0003`):
+  every message stores its hash and SQL compares stored hashes, so the key never
+  reaches the database. A dump no longer lets someone brute-force phone numbers or
+  chat ids without the secret. Changing the secret orphans existing opt-outs, so
+  rotate it only with a rehash plan.
+- With `COMMUNICATION_PUBLIC_URL` set to a plain https origin, every email carries
+  RFC 8058 `List-Unsubscribe` and `List-Unsubscribe-Post` headers. The link holds a
+  signed token (workspace id, message id, 128-bit HMAC tag), never the address.
+- `GET /v1/unsubscribe?t=` shows a confirmation page with a POST button.
+  `POST /v1/unsubscribe?t=` with body `List-Unsubscribe=One-Click` records an
+  `email.list_unsubscribe` opt-out (event id `unsubscribe:<message id>`, so a repeat
+  click is a no-op; the `unsubscribe:` and `provider:` event-id prefixes are reserved,
+  so `POST /v1/opt-outs` cannot pre-claim them). Only the exact token string the
+  service issues verifies. Bad or foreign tokens are a generic 404, other bodies 400. Pages
+  never show the address and send `no-store`, `no-referrer` and a CSP that allows no
+  scripts. These routes need no JWT: the signed token is the authority.
 
 ## Staging plan (not executed) — first possible date 2026-11-01
 
@@ -219,16 +240,19 @@ needs the owner's go; nothing has been deployed.
 1. Database: a dedicated database for this service (no shared tables), a DDL role
    for `migrate` and a separate NOSUPERUSER NOBYPASSRLS runtime role with the grants
    above (`message_outbox` SELECT/INSERT/UPDATE, `message_opt_out` SELECT/INSERT,
-   history SELECT). Connection strings go to Infisical `/platform-communication`.
+   history SELECT). Connection strings and a new random `COMMUNICATION_SECRET` go
+   to Infisical `/platform-communication`.
 2. Sender: verify a sending domain in Resend (owner, dashboard: the Infisical
    `/resend` key is send-only and cannot list domains) and set `RESEND_FROM`.
 3. Image: build the `wheelhouse/` (this wheel plus `platform-backend-core` at the
    CI-pinned commit and their dependencies) and deploy one Railway service for
    `serve` and one for `worker` with `COMMUNICATION_WORKSPACE_ID`, JWT issuer
-   `empire-platform`, `RESEND_API_KEY`, `RESEND_FROM`. Run `migrate` once with the
+   `empire-platform`, `RESEND_API_KEY`, `RESEND_FROM`, `COMMUNICATION_SECRET` and
+   `COMMUNICATION_PUBLIC_URL` (the service's public https origin). Run `migrate` once with the
    DDL role. Approve the pending deployment through GraphQL.
 4. Smoke test: `/readyz` 200; one `POST /v1/messages` to an owner address with a
    service token (`messages:write`) reaches `delivered`; a replay returns the same
-   id; an opt-out for a second owner address suppresses its message with 0 attempts.
+   id; the delivered mail shows an unsubscribe option, and clicking it suppresses the
+   next message to that address with 0 attempts.
 5. Then add Sentry and the uptime monitor, and only after that move a first
    consumer (the portfolio contact form) with a rollback to its current path.
