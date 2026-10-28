@@ -7,7 +7,7 @@ from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
 
 from .adapters import configured_adapters
-from .store import Conflict, OutboxStore, QueueFull
+from .store import Conflict, InvalidInput, OutboxStore, QueueFull
 
 
 class Message(BaseModel):
@@ -32,7 +32,9 @@ def create_app(database,verifier,*,adapters=None):
     app.state.readiness_checks['delivery_adapters']=lambda: any(x.configured for x in adapters.values())
     @app.exception_handler(QueueFull)
     async def full(request,exc):return JSONResponse({'detail':'Outbox capacity reached'},429)
-    @app.exception_handler(ValueError)
+    # Only the domain InvalidInput is a client error; any other exception (an unexpected
+    # ValueError included) is a server bug and becomes the shared core's redacted 500.
+    @app.exception_handler(InvalidInput)
     async def invalid(request,exc):return JSONResponse({'detail':'Invalid message'},422)
     @app.exception_handler(Conflict)
     async def conflict(request,exc):return JSONResponse({'detail':'Idempotency conflict'},409)

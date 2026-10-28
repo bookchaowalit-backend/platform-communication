@@ -203,7 +203,7 @@ Implements the BOO-150 rules the owner accepted on 2026-10-16 in this runtime
   `email.list_unsubscribe`, `provider.blocked`) and an external `event_id`.
   201 `created`, 200 `existing`: a replayed event id or an address that is already
   blocked changes nothing; an event id reused for another channel or address is
-  409. Validation errors are generic 422.
+  409. Validation errors are generic 422 (domain `InvalidInput` only; see 2026-10-29).
 - `message_opt_out` stores only `sha256("recipient:" + address)` (emails lowercased),
   never the address. Forced RLS per workspace; readiness requires it and runtime
   SELECT/INSERT on the table.
@@ -296,3 +296,31 @@ GREEN: `bash scripts/check.sh` 81 unit tests OK; `ruff check .` clean.
 The database tests run in the CI `runtime` job against PostgreSQL 16; the image
 build is verified only by the CI `image` job (no local Docker). Nothing was
 pushed to a registry or deployed.
+
+## 422 only for domain input — 2026-10-29 (branch `invalid-input`)
+
+Ported from `platform-developer` `8047108` and `platform-commerce` `main`. The app
+mapped every `ValueError` to 422 `Invalid message`, so a server bug surfaced as a
+client error. Validation now raises `InvalidInput(ValueError)` (in
+`platform_communication/errors.py`, re-exported by `store`), and only that maps
+to 422. Request-schema errors keep the core's 422; any other exception, including
+an unexpected `ValueError`, is the shared core's redacted 500.
+
+`InvalidInput`: `create` (key, recipient, body, template, attempts, subject),
+`list` limit, `record_opt_out` (channel, recipient, source, event id) and
+`render_template` for an unknown template. Deliberately still a plain
+`ValueError` (never 422): the `Keys` secret check and `OutboxStore` capacity
+(startup fail-closed: `create_app` still raises without `COMMUNICATION_SECRET`),
+the worker-only `claim` lease and `finish` outcome arguments, and the `worker`
+command's "no delivery adapters" exit. `unsubscribe_link` still treats a missing
+secret as "no link". Readiness is unchanged.
+
+RED (`runtime_tests/test_error_mapping.py` written first): collection error,
+`InvalidInput` missing. With a temporary `InvalidInput = ValueError` stand-in:
+5 failed (`test_unexpected_value_error_is_redacted_500` `assert 422 == 500`, and
+the four "stays a plain ValueError" cases), 15 passed.
+
+GREEN: `PLATFORM_TEST_DSN=... pytest -q` 164 passed, 5 skipped (the
+`PLATFORM_NOTIFICATIONS_API` checkout gate tests CI runs), 59 subtests, against
+PostgreSQL 16 (`pgserver`); `bash scripts/check.sh` 81 tests OK; `ruff check .`
+clean. Nothing deployed.

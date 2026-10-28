@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from psycopg.rows import dict_row
 
 from .adapters import render_template
+from .errors import InvalidInput
 from .keys import Keys
 from .migrations import MIGRATIONS
 
@@ -36,13 +37,13 @@ class OutboxStore:
         if type(max_pending) is not int or not 1<=max_pending<=10000:raise ValueError('Invalid capacity')
         self.db=database;self.max_pending=max_pending;self.keys=keys or Keys.from_env()
     def create(self,workspace,key,channel,recipient,body,template,max_attempts=3,subject=None):
-        if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',key):raise ValueError('Invalid key')
-        if not valid_recipient(channel,recipient):raise ValueError('Invalid recipient')
-        if not isinstance(body,str) or not 1<=len(body)<=4096 or any(ord(x)<32 and x not in '\n\t' for x in body):raise ValueError('Invalid body')
+        if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',key):raise InvalidInput('Invalid key')
+        if not valid_recipient(channel,recipient):raise InvalidInput('Invalid recipient')
+        if not isinstance(body,str) or not 1<=len(body)<=4096 or any(ord(x)<32 and x not in '\n\t' for x in body):raise InvalidInput('Invalid body')
         render_template(template,body)
-        if template=='html' and channel!='email':raise ValueError('Invalid template')
-        if type(max_attempts) is not int or not 1<=max_attempts<=10:raise ValueError('Invalid attempts')
-        if subject is not None and (channel!='email' or not valid_subject(subject)):raise ValueError('Invalid subject')
+        if template=='html' and channel!='email':raise InvalidInput('Invalid template')
+        if type(max_attempts) is not int or not 1<=max_attempts<=10:raise InvalidInput('Invalid attempts')
+        if subject is not None and (channel!='email' or not valid_subject(subject)):raise InvalidInput('Invalid subject')
         expected=fingerprint(channel,recipient,body,template,max_attempts,subject)
         with self.db.transaction(workspace) as conn, conn.cursor(row_factory=dict_row) as c:
             c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",('message-capacity:'+str(workspace),))
@@ -56,7 +57,7 @@ class OutboxStore:
         with self.db.transaction(workspace) as conn, conn.cursor(row_factory=dict_row) as c:
             return c.execute(f'SELECT {PUBLIC} FROM message_outbox WHERE id=%s',(id,)).fetchone()
     def list(self,workspace,limit=100,after=None):
-        if not 1<=limit<=100:raise ValueError('Invalid limit')
+        if not 1<=limit<=100:raise InvalidInput('Invalid limit')
         with self.db.transaction(workspace) as conn, conn.cursor(row_factory=dict_row) as c:
             return c.execute(f'SELECT {PUBLIC} FROM message_outbox WHERE (%s::uuid IS NULL OR id>%s::uuid) ORDER BY id LIMIT %s',(after,after,limit)).fetchall()
     def claim(self,workspace,lease_seconds=30):
@@ -94,12 +95,12 @@ class OutboxStore:
 
         Reusing an event id for a different channel or address raises Conflict instead of
         reporting ``existing`` for an address that was never blocked."""
-        if channel!='*' and channel not in PATTERNS:raise ValueError('Invalid channel')
+        if channel!='*' and channel not in PATTERNS:raise InvalidInput('Invalid channel')
         channels=list(PATTERNS) if channel=='*' else [channel]
-        if not any(valid_recipient(x,recipient) for x in channels):raise ValueError('Invalid recipient')
-        if source not in OPT_OUT_SOURCES:raise ValueError('Invalid source')
-        if not isinstance(event_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',event_id):raise ValueError('Invalid event')
-        if not internal and event_id.startswith(RESERVED_EVENT_PREFIXES):raise ValueError('Invalid event')
+        if not any(valid_recipient(x,recipient) for x in channels):raise InvalidInput('Invalid recipient')
+        if source not in OPT_OUT_SOURCES:raise InvalidInput('Invalid source')
+        if not isinstance(event_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',event_id):raise InvalidInput('Invalid event')
+        if not internal and event_id.startswith(RESERVED_EVENT_PREFIXES):raise InvalidInput('Invalid event')
         hashed=self.keys.recipient_hash(next(x for x in channels if valid_recipient(x,recipient)),recipient)
         with self.db.transaction(workspace) as c:
             created=c.execute('INSERT INTO message_opt_out(workspace_id,channel,recipient_hash,source,event_id) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING channel',(workspace,channel,hashed,source,event_id)).fetchone()
