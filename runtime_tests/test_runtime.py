@@ -1,14 +1,23 @@
-from uuid import uuid4
-from concurrent.futures import ThreadPoolExecutor
-import pytest
-from platform_communication.store import OutboxStore,Conflict
-from platform_communication.worker import DeliveryWorker
-from platform_communication.adapters import DeliveryError,render_template,ResendAdapter,TwilioAdapter,FCMAdapter,TelegramAdapter
-from platform_communication.migrations import MIGRATIONS
 import os
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
+
 import pytest
 from platform_backend_core import Database, MigrationRunner
 from platform_backend_core.testing import temporary_database
+
+from platform_communication.adapters import (
+    DeliveryError,
+    FCMAdapter,
+    ResendAdapter,
+    TelegramAdapter,
+    TwilioAdapter,
+    render_template,
+)
+from platform_communication.migrations import MIGRATIONS
+from platform_communication.store import Conflict, OutboxStore
+from platform_communication.worker import DeliveryWorker
+
 
 @pytest.fixture
 def database():
@@ -93,9 +102,8 @@ def test_workspace_pending_queue_is_bounded_and_replay_survives_limit(database):
 def test_outbox_force_rls_rejects_foreign_write_and_stale_finish(database):
     import psycopg
     db,_=database;w=uuid4();s=OutboxStore(db)
-    with db.transaction(w) as c:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            c.execute("INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,body,template,max_attempts) VALUES (%s,%s,'foreign','fixture','email','a@example.invalid','hi','plain',1)",(uuid4(),uuid4()))
+    with db.transaction(w) as c, pytest.raises(psycopg.errors.InsufficientPrivilege):
+        c.execute("INSERT INTO message_outbox(workspace_id,id,event_key,fingerprint,channel,recipient,body,template,max_attempts) VALUES (%s,%s,'foreign','fixture','email','a@example.invalid','hi','plain',1)",(uuid4(),uuid4()))
     row=s.create(w,'fenced','email','a@example.invalid','hi','plain');lease=s.claim(w)
     assert s.mark_sending(w,row['id'],lease['lease_token'])
     assert not s.finish(w,row['id'],uuid4(),'delivered')

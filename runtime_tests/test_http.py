@@ -1,15 +1,18 @@
-from platform_communication.app import create_app
-from platform_communication.migrations import MIGRATIONS
 import os
 import time
 from uuid import uuid4
-import pytest
+
 import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
+import pytest
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
-from platform_backend_core import Database,MigrationRunner,TokenVerifier
+from platform_backend_core import Database, MigrationRunner, TokenVerifier
 from platform_backend_core.testing import temporary_database
+
+from platform_communication.app import create_app
+from platform_communication.migrations import MIGRATIONS
+
 
 def auth():
     key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
@@ -32,7 +35,7 @@ def setup():
         db.close()
 
 def test_missing_schema_is_not_ready(setup):
-    temp,db,verifier,headers=setup
+    _temp,db,verifier,_headers=setup
     with TestClient(create_app(db,verifier)) as c:
         assert c.get('/readyz').status_code==503
         assert c.get('/healthz').status_code==200
@@ -59,28 +62,27 @@ def test_message_api_auth_disabled_adapter_and_redaction(setup):
 
 def test_applied_migration_checksum_required(setup):
     import psycopg
-    from psycopg import sql
-    temp,db,verifier,headers=setup
+    temp,db,verifier,_headers=setup
     MigrationRunner(temp.admin_dsn,namespace='communication').apply(MIGRATIONS);temp.grant_schema('public')
     with psycopg.connect(temp.admin_dsn) as admin:
         admin.execute("DELETE FROM platform_schema_migrations WHERE namespace=%s",('communication',))
     class Adapter:configured=True
-    kwargs={'adapters':{'email':Adapter()}} if 'communication'=='communication' else {}
+    kwargs={'adapters':{'email':Adapter()}}
     with TestClient(create_app(db,verifier,**kwargs)) as c:
         assert c.get('/readyz').status_code==503
 
 
-@pytest.mark.parametrize('kind,target,privilege',[('TABLE', 'message_outbox', 'SELECT'), ('TABLE', 'message_outbox', 'INSERT'), ('TABLE', 'message_outbox', 'UPDATE'), ('SCHEMA', 'public', 'USAGE'), ('TABLE', 'platform_schema_migrations', 'SELECT')])
+@pytest.mark.parametrize('kind,target,privilege',[('TABLE', 'message_outbox', 'SELECT'), ('TABLE', 'message_outbox', 'INSERT'), ('TABLE', 'message_outbox', 'UPDATE'), ('TABLE', 'message_opt_out', 'SELECT'), ('TABLE', 'message_opt_out', 'INSERT'), ('SCHEMA', 'public', 'USAGE'), ('TABLE', 'platform_schema_migrations', 'SELECT')])
 def test_readiness_requires_each_effective_privilege(setup,kind,target,privilege):
     import psycopg
     from psycopg import sql
-    temp,db,verifier,headers=setup
+    temp,db,verifier,_headers=setup
     MigrationRunner(temp.admin_dsn,namespace='communication').apply(MIGRATIONS)
     temp.grant_schema('public')
     with psycopg.connect(temp.admin_dsn) as admin:
         admin.execute('REVOKE USAGE ON SCHEMA public FROM PUBLIC')
     class Adapter:configured=True
-    kwargs={'adapters':{'email':Adapter()}} if 'communication'=='communication' else {}
+    kwargs={'adapters':{'email':Adapter()}}
     with TestClient(create_app(db,verifier,**kwargs)) as c:
         assert c.get('/readyz').status_code==200
         with psycopg.connect(temp.admin_dsn) as admin:

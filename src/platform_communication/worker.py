@@ -1,4 +1,6 @@
 from .adapters import DeliveryError
+
+
 class DeliveryWorker:
     """Bounded synchronous single-workspace worker, safe to run in separate processes."""
     def __init__(self,store,adapters):self.store=store;self.adapters=adapters
@@ -10,7 +12,9 @@ class DeliveryWorker:
         outcome,provider_id='dead',None
         if adapter is not None and adapter.configured:
             try:provider_id=adapter.send(message);outcome='delivered'
-            except DeliveryError as exc:outcome=exc.outcome
-            except Exception:outcome='uncertain'
+            except DeliveryError as exc:
+                outcome=exc.outcome
+                if exc.opt_out:self.store.record_opt_out(workspace,message['channel'],message['recipient'],'provider.blocked','provider:'+str(message['id']))
+            except Exception:outcome='uncertain'  # noqa: BLE001 - any adapter failure is redacted to uncertain
         self.store.finish(workspace,message['id'],message['lease_token'],outcome,provider_id)
         return True

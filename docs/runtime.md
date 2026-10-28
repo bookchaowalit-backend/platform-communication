@@ -169,3 +169,40 @@ Store queries that return mappings use cursor-scoped `dict_row`; they do not
 change the pooled connection row factory. Single-connection PostgreSQL
 regressions cover successful traffic, conflicts, rollback and foreign-workspace
 reads followed by repeated service and shared-core readiness checks.
+
+## Opt-out, email subject and retry default — 2026-10-28
+
+Implements the BOO-150 rules the owner accepted on 2026-10-16 in this runtime
+(migration `0002`); the runtime is still not activated.
+
+- `POST /v1/opt-outs` (`opt-outs:write`) takes `channel` (`email|sms|push|telegram`
+  or `*` for every channel), `recipient`, `source` (`owner.global`,
+  `email.list_unsubscribe`, `provider.blocked`) and an external `event_id`.
+  201 `created`, 200 `existing`: a replayed event id or an address that is already
+  blocked changes nothing. Validation errors are generic 422.
+- `message_opt_out` stores only `sha256("recipient:" + address)` (emails lowercased),
+  never the address. Forced RLS per workspace; readiness requires it and runtime
+  SELECT/INSERT on the table.
+- Enforcement happens before any provider call and counts no attempt: `create`
+  marks a message to a blocked address `suppressed`, `claim` suppresses queued rows
+  (and expired presend leases, giving the attempt back), and `mark_sending`
+  suppresses a row whose opt-out arrived after the claim. `suppressed` is terminal
+  and does not count toward queue capacity.
+- A Telegram 403 whose body says `bot was blocked by the user` is dead and records a
+  `provider.blocked` opt-out (event id `provider:<message id>`), so later sends to
+  that chat are suppressed. Other 403s are dead only.
+- Email takes an optional `subject` (1..200 characters, no control characters,
+  email only, part of the idempotency fingerprint); without it Resend still gets
+  `Notification`.
+- `max_attempts` defaults to 3, the accepted retry policy.
+
+Not done here: an RFC 8058 `List-Unsubscribe` header and its public one-click
+endpoint (needs a signed per-message token), routing LINE `unfollow` from
+`/api/webhook/line`, and a `recipient_ref` model. Callers record email
+unsubscribes through `POST /v1/opt-outs` until then.
+
+Verification: 111 passed, 5 skipped (server-parity cases that need the pinned
+upstream checkout), against PostgreSQL 16 via `pgserver`, Python 3.12. The new
+tests in `runtime_tests/test_opt_out.py` failed first (11 of 11, then the two
+readiness cases) and pass now. Ruff clean, including the 32 findings the branch
+had against main's Ruff gate.

@@ -1,17 +1,29 @@
 from uuid import UUID
-from fastapi import Depends,Header,HTTPException,Query
+
+from fastapi import Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel,ConfigDict,Field
-from platform_backend_core import create_app as base_app,require_scope
-from .store import OutboxStore,Conflict,QueueFull
+from platform_backend_core import create_app as base_app
+from platform_backend_core import require_scope
+from pydantic import BaseModel, ConfigDict, Field
+
 from .adapters import configured_adapters
+from .store import Conflict, OutboxStore, QueueFull
+
+
 class Message(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
     channel:str=Field(max_length=16)
     recipient:str=Field(min_length=1,max_length=512)
     body:str=Field(min_length=1,max_length=4096)
+    subject:str|None=Field(default=None,min_length=1,max_length=200)
     template:str=Field(default='plain',max_length=16)
-    max_attempts:int=Field(default=5,ge=1,le=10)
+    max_attempts:int=Field(default=3,ge=1,le=10)
+class OptOut(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True)
+    channel:str=Field(max_length=16)
+    recipient:str=Field(min_length=1,max_length=512)
+    source:str=Field(max_length=32)
+    event_id:str=Field(min_length=1,max_length=128)
 def create_app(database,verifier,*,adapters=None):
     app=base_app('communication',database,verifier,max_body_bytes=32768);store=OutboxStore(database)
     adapters=configured_adapters() if adapters is None else dict(adapters)
@@ -28,7 +40,11 @@ def create_app(database,verifier,*,adapters=None):
     def create(body:Message,key:str=Header(alias='Idempotency-Key',max_length=128),p=Depends(require_scope('messages:write'))):
         adapter=adapters.get(body.channel)
         if adapter is None or not adapter.configured:raise HTTPException(503,'Delivery unavailable')
-        return store.create(p.workspace,key,body.channel,body.recipient,body.body,body.template,body.max_attempts)
+        return store.create(p.workspace,key,body.channel,body.recipient,body.body,body.template,body.max_attempts,body.subject)
+    @app.post('/v1/opt-outs')
+    def opt_out(body:OptOut,p=Depends(require_scope('opt-outs:write'))):
+        outcome=store.record_opt_out(p.workspace,body.channel,body.recipient,body.source,body.event_id)
+        return JSONResponse({'outcome':outcome},201 if outcome=='created' else 200)
     @app.get('/v1/messages')
     def listing(limit:int=Query(100,ge=1,le=100),after:UUID|None=None,p=Depends(require_scope('messages:read'))):return store.list(p.workspace,limit,after)
     @app.get('/v1/messages/{id}')

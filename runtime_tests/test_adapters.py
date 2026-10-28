@@ -1,8 +1,17 @@
 import json
 from uuid import UUID
+
 import httpx
 import pytest
-from platform_communication.adapters import ResendAdapter,TwilioAdapter,FCMAdapter,TelegramAdapter,DeliveryError
+
+from platform_communication.adapters import (
+    DeliveryError,
+    FCMAdapter,
+    ResendAdapter,
+    TelegramAdapter,
+    TwilioAdapter,
+)
+
 
 def test_fixed_provider_wire_payloads_without_external_io():
     m={'id':UUID('00000000-0000-0000-0000-000000000001'),'recipient':'person@example.invalid','body':'<fixture>','template':'html'}

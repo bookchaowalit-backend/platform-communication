@@ -1,9 +1,12 @@
 """Explicit service lifecycle; migrations never run at API startup."""
 import argparse
 import os
-from platform_backend_core import Database,MigrationRunner,TokenVerifier
-from .migrations import MIGRATIONS
+
+from platform_backend_core import Database, MigrationRunner, TokenVerifier
+
 from .app import create_app
+from .migrations import MIGRATIONS
+
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['serve','migrate','worker']);args=p.parse_args()
@@ -12,11 +15,13 @@ def main():
             MigrationRunner(os.environ['DATABASE_URL'],namespace='communication').apply(MIGRATIONS)
             return
         if args.command=='worker':
-            import signal,time
+            import signal
+            import time
             from uuid import UUID
-            from .worker import DeliveryWorker
-            from .store import OutboxStore
+
             from .adapters import configured_adapters
+            from .store import OutboxStore
+            from .worker import DeliveryWorker
             workspace=UUID(os.environ['COMMUNICATION_WORKSPACE_ID'])
             adapters=configured_adapters()
             if not any(a.configured for a in adapters.values()):raise ValueError('No delivery adapters')
@@ -36,6 +41,6 @@ def main():
         app=create_app(Database(os.environ['DATABASE_URL']),verifier)
         import uvicorn
         uvicorn.run(app,host='0.0.0.0',port=int(os.environ.get('PORT','8080')),access_log=False,limit_concurrency=100)
-    except Exception:
+    except Exception:  # noqa: BLE001 - startup errors are reported without configuration values
         raise SystemExit('Service configuration or dependency unavailable') from None
 if __name__=='__main__':main()

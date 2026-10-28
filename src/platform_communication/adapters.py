@@ -3,36 +3,43 @@ import html
 import os
 import re
 from time import monotonic
+
 import httpx
+
+
 class DeliveryError(Exception):
-    def __init__(self,outcome):
+    def __init__(self,outcome,*,opt_out=False):
         self.outcome=outcome if outcome in ['retry','dead','uncertain'] else 'uncertain'
+        # The provider said the recipient blocked us; only meaningful with a dead outcome.
+        self.opt_out=bool(opt_out) and self.outcome=='dead'
         super().__init__('Delivery unavailable')
 def render_template(template,body):
     if template=='plain':return body
     if template=='html':return '<p>'+html.escape(body).replace('\n','<br>')+'</p>'
     raise ValueError('Unknown template')
 class HTTPAdapter:
+    blocked_marker=None
     def __init__(self,*,transport=None):self.transport=transport
     def request(self,url,**kwargs):
         if not self.configured:raise DeliveryError('dead')
         deadline=monotonic()+5.0
         try:
-            with httpx.Client(timeout=httpx.Timeout(5.0),follow_redirects=False,trust_env=False,transport=self.transport,limits=httpx.Limits(max_connections=2,max_keepalive_connections=0)) as client:
-                with client.stream('POST',url,**kwargs) as response:
+            with httpx.Client(timeout=httpx.Timeout(5.0),follow_redirects=False,trust_env=False,transport=self.transport,limits=httpx.Limits(max_connections=2,max_keepalive_connections=0)) as client, \
+                    client.stream('POST',url,**kwargs) as response:
                     # A 429 explicitly rejects admission; 5xx/timeouts can follow an effect.
                     if response.status_code==429:raise DeliveryError('retry')
                     if response.status_code>=500 or 300<=response.status_code<400:raise DeliveryError('uncertain')
-                    if response.status_code>=400:raise DeliveryError('dead')
+                    if response.status_code>=400 and not (response.status_code==403 and self.blocked_marker):raise DeliveryError('dead')
                     data=bytearray()
                     for chunk in response.iter_bytes():
                         if monotonic()>deadline:raise DeliveryError('uncertain')
                         data.extend(chunk)
                         if len(data)>65536:raise DeliveryError('uncertain')
+                    if response.status_code==403:raise DeliveryError('dead',opt_out=self.blocked_marker in data)
                     import json
                     return json.loads(data)
         except DeliveryError:raise
-        except Exception:raise DeliveryError('uncertain') from None
+        except Exception:raise DeliveryError('uncertain') from None  # noqa: BLE001 - provider errors are redacted
 class ResendAdapter(HTTPAdapter):
     def __init__(self,api_key=None,sender=None,**kwargs):
         super().__init__(**kwargs);self.key=api_key;self.sender=sender
@@ -40,7 +47,7 @@ class ResendAdapter(HTTPAdapter):
     def send(self,m):
         if not self.configured:raise DeliveryError('dead')
         field='html' if m['template']=='html' else 'text'
-        data=self.request('https://api.resend.com/emails',headers={'Authorization':'Bearer '+self.key,'Idempotency-Key':'message/'+str(m['id'])},json={'from':self.sender,'to':[m['recipient']],'subject':'Notification',field:render_template(m['template'],m['body'])})
+        data=self.request('https://api.resend.com/emails',headers={'Authorization':'Bearer '+self.key,'Idempotency-Key':'message/'+str(m['id'])},json={'from':self.sender,'to':[m['recipient']],'subject':m.get('subject') or 'Notification',field:render_template(m['template'],m['body'])})
         if not isinstance(data.get('id'),str):raise DeliveryError('uncertain')
         return data['id']
 class TwilioAdapter(HTTPAdapter):
@@ -62,6 +69,7 @@ class FCMAdapter(HTTPAdapter):
         if not isinstance(data.get('name'),str):raise DeliveryError('uncertain')
         return data['name']
 class TelegramAdapter(HTTPAdapter):
+    blocked_marker=b'bot was blocked by the user'
     def __init__(self,bot_token=None,**kwargs):
         super().__init__(**kwargs);self.token=bot_token
         self.configured=bool(bot_token and re.fullmatch(r'[0-9]{5,20}:[A-Za-z0-9_-]{20,100}',bot_token))
