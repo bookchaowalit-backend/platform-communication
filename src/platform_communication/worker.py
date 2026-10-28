@@ -14,7 +14,7 @@ class DeliveryWorker:
             try:provider_id=adapter.send(message);outcome='delivered'
             except DeliveryError as exc:
                 outcome=exc.outcome
-                if exc.opt_out:self.store.record_opt_out(workspace,message['channel'],message['recipient'],'provider.blocked','provider:'+str(message['id']))
+                if exc.opt_out:self.store.record_opt_out(workspace,message['channel'],message['recipient'],'provider.blocked','provider:'+str(message['id']),internal=True)
             except Exception:outcome='uncertain'  # noqa: BLE001 - any adapter failure is redacted to uncertain
         self.store.finish(workspace,message['id'],message['lease_token'],outcome,provider_id)
         return True

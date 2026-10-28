@@ -18,3 +18,10 @@ ALTER TABLE message_opt_out ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message_opt_out FORCE ROW LEVEL SECURITY;
 CREATE POLICY workspace ON message_opt_out USING(workspace_id=nullif(current_setting('app.workspace_id',true),'')::uuid) WITH CHECK(workspace_id=nullif(current_setting('app.workspace_id',true),'')::uuid);
 """))
+# Keyed recipient hashes: the service computes HMAC hashes and stores one per message, so SQL only compares.
+# 0002 rows hold unkeyed hashes that no longer match; the runtime was never deployed before 0003.
+# NOT NULL fails closed: a row without a hash would silently escape every opt-out.
+MIGRATIONS.append(Migration('0003',"""
+ALTER TABLE message_outbox ADD COLUMN recipient_hash text NOT NULL;
+CREATE INDEX ON message_opt_out(workspace_id,recipient_hash);
+"""))

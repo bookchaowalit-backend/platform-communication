@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import Depends, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from platform_backend_core import create_app as base_app
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,4 +52,17 @@ def create_app(database,verifier,*,adapters=None):
         row=store.get(p.workspace,id)
         if row is None:raise HTTPException(404,'Not found')
         return row
+    page_headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'"}
+    def page(text,status=200):
+        return HTMLResponse('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Unsubscribe</title>'+text,status,headers=page_headers)
+    # Unauthenticated by design: the signed token is the authority, and pages never show the address.
+    @app.get('/v1/unsubscribe')
+    def unsubscribe_page(t:str|None=Query(None,max_length=100)):
+        if store.unsubscribe_target(t) is None:return page('<p>This link is not valid.</p>',404)
+        return page('<p>Stop receiving these emails?</p><form method="post"><input type="hidden" name="List-Unsubscribe" value="One-Click"><button type="submit">Unsubscribe</button></form>')
+    @app.post('/v1/unsubscribe')
+    async def unsubscribe(request:Request,t:str|None=Query(None,max_length=100)):
+        if (await request.body()).strip()!=b'List-Unsubscribe=One-Click':return page('<p>Invalid request.</p>',400)
+        if not store.unsubscribe(t):return page('<p>This link is not valid.</p>',404)
+        return page('<p>You are unsubscribed.</p>')
     return app

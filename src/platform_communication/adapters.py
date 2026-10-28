@@ -6,6 +6,8 @@ from time import monotonic
 
 import httpx
 
+from .keys import Keys
+
 
 class DeliveryError(Exception):
     def __init__(self,outcome,*,opt_out=False):
@@ -41,13 +43,17 @@ class HTTPAdapter:
         except DeliveryError:raise
         except Exception:raise DeliveryError('uncertain') from None  # noqa: BLE001 - provider errors are redacted
 class ResendAdapter(HTTPAdapter):
-    def __init__(self,api_key=None,sender=None,**kwargs):
-        super().__init__(**kwargs);self.key=api_key;self.sender=sender
+    def __init__(self,api_key=None,sender=None,*,unsubscribe_url=None,**kwargs):
+        super().__init__(**kwargs);self.key=api_key;self.sender=sender;self.unsubscribe_url=unsubscribe_url
         self.configured=bool(api_key and sender and len(sender)<=254 and '\n' not in sender and '\r' not in sender)
     def send(self,m):
         if not self.configured:raise DeliveryError('dead')
         field='html' if m['template']=='html' else 'text'
-        data=self.request('https://api.resend.com/emails',headers={'Authorization':'Bearer '+self.key,'Idempotency-Key':'message/'+str(m['id'])},json={'from':self.sender,'to':[m['recipient']],'subject':m.get('subject') or 'Notification',field:render_template(m['template'],m['body'])})
+        payload={'from':self.sender,'to':[m['recipient']],'subject':m.get('subject') or 'Notification',field:render_template(m['template'],m['body'])}
+        if self.unsubscribe_url:
+            # RFC 8058 one-click unsubscribe; the link carries a signed token, never the address.
+            payload['headers']={'List-Unsubscribe':'<'+self.unsubscribe_url(m)+'>','List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}
+        data=self.request('https://api.resend.com/emails',headers={'Authorization':'Bearer '+self.key,'Idempotency-Key':'message/'+str(m['id'])},json=payload)
         if not isinstance(data.get('id'),str):raise DeliveryError('uncertain')
         return data['id']
 class TwilioAdapter(HTTPAdapter):
@@ -78,5 +84,11 @@ class TelegramAdapter(HTTPAdapter):
         data=self.request(f'https://api.telegram.org/bot{self.token}/sendMessage',json={'chat_id':m['recipient'],'text':m['body']})
         if data.get('ok') is not True or not isinstance(data.get('result'),dict) or type(data['result'].get('message_id')) is not int:raise DeliveryError('uncertain')
         return str(data['result']['message_id'])
+def unsubscribe_link(origin):
+    """Link builder for a plain https origin (no path, query or credentials), else None."""
+    if not isinstance(origin,str) or not re.fullmatch(r'https://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?',origin):return None
+    try:keys=Keys.from_env()
+    except ValueError:return None
+    return lambda m:origin+'/v1/unsubscribe?t='+keys.unsubscribe_token(m['workspace_id'],m['id'])
 def configured_adapters():
-    return {'email':ResendAdapter(os.environ.get('RESEND_API_KEY'),os.environ.get('RESEND_FROM')),'sms':TwilioAdapter(os.environ.get('TWILIO_ACCOUNT_SID'),os.environ.get('TWILIO_AUTH_TOKEN'),os.environ.get('TWILIO_FROM')),'push':FCMAdapter(os.environ.get('FCM_PROJECT_ID'),os.environ.get('FCM_ACCESS_TOKEN')),'telegram':TelegramAdapter(os.environ.get('TELEGRAM_BOT_TOKEN'))}
+    return {'email':ResendAdapter(os.environ.get('RESEND_API_KEY'),os.environ.get('RESEND_FROM'),unsubscribe_url=unsubscribe_link(os.environ.get('COMMUNICATION_PUBLIC_URL'))),'sms':TwilioAdapter(os.environ.get('TWILIO_ACCOUNT_SID'),os.environ.get('TWILIO_AUTH_TOKEN'),os.environ.get('TWILIO_FROM')),'push':FCMAdapter(os.environ.get('FCM_PROJECT_ID'),os.environ.get('FCM_ACCESS_TOKEN')),'telegram':TelegramAdapter(os.environ.get('TELEGRAM_BOT_TOKEN'))}
