@@ -6,6 +6,7 @@ from time import monotonic
 
 import httpx
 
+from .errors import InvalidInput
 from .keys import Keys
 
 
@@ -18,7 +19,7 @@ class DeliveryError(Exception):
 def render_template(template,body):
     if template=='plain':return body
     if template=='html':return '<p>'+html.escape(body).replace('\n','<br>')+'</p>'
-    raise ValueError('Unknown template')
+    raise InvalidInput('Unknown template')
 class HTTPAdapter:
     blocked_marker=None
     def __init__(self,*,transport=None):self.transport=transport
