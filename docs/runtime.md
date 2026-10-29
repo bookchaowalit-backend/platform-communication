@@ -44,6 +44,9 @@ Dockerfile and `[tool.uv.sources]` together; the tests fail on any mismatch.
 - Configure `JWT_ISSUER`, `JWT_AUDIENCE`, and exactly one `JWT_PUBLIC_KEY`
   (public PEM) or `JWT_JWKS_URL` (trusted HTTPS). Credentials never come from
   files or token-supplied URLs. Use the shared-core workspace RS256 profile.
+- Optional `SENTRY_DSN` turns on error reporting (unset = off); see
+  `src/platform_communication/_sentry.py` for what is scrubbed (no bodies, headers, URLs,
+  recipients, emails or phone numbers). `SENTRY_ENVIRONMENT` defaults to `production`.
 - `GET /healthz`, `/readyz`, `/metrics` use shared redacted diagnostics.
   Readiness checks exact applied migration versions/checksums, table RLS, effective
   schema USAGE/history SELECT and every required table operation individually;
