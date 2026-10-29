@@ -19,7 +19,7 @@ needed. The `Dockerfile` is two stages:
 
 1. `build` (`python:3.12-slim` plus `git`): `pip wheel` builds this service's wheel
    and `platform-backend-core` from the same reviewed commit CI installs
-   (`88306b28228f789eecd214a11ca8a0640e9d6233`), with all transitive dependencies.
+   (`21d5f44d26220080cbed43b9807979dc84a8533a`), with all transitive dependencies.
 2. `runtime` (`python:3.12-slim`, no git, no build tools): installs only those
    wheels with `--no-index`, runs as UID/GID `65532`, `PORT=8080`, and keeps
    `CMD ["python", "-m", "platform_communication", "serve"]`. Run `migrate` as a
