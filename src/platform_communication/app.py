@@ -5,7 +5,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from platform_backend_core import create_app as base_app
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware import Middleware
 
+from ._sentry import CaptureErrors
 from .adapters import configured_adapters
 from .store import Conflict, InvalidInput, OutboxStore, QueueFull
 
@@ -26,6 +28,8 @@ class OptOut(BaseModel):
     event_id:str=Field(min_length=1,max_length=128)
 def create_app(database,verifier,*,adapters=None):
     app=base_app('communication',database,verifier,max_body_bytes=32768);store=OutboxStore(database)
+    # Last in the list = innermost: inside the core boundary that turns errors into a 500.
+    app.user_middleware.append(Middleware(CaptureErrors))
     adapters=configured_adapters() if adapters is None else dict(adapters)
     app.state.adapters=adapters
     app.state.readiness_checks['outbox_schema']=store.ready
