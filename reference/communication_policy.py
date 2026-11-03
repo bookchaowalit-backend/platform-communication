@@ -56,6 +56,9 @@ class PolicyError(ValueError):
         super().__init__(f"{status}:{reason}")
         self.status = status
         self.reason = reason
+        # Set by opt_out_from_inbound: the valid opt-outs and the errors of a partly malformed batch.
+        self.opt_outs: list[Any] = []
+        self.errors: list[Any] = []
 
 
 def dedupe_key(*parts: Any) -> str:

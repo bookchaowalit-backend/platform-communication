@@ -66,8 +66,8 @@ def test_stored_hashes_use_the_key_and_still_suppress(database):
     assert row['status']=='suppressed'
     expected=Keys(SECRET).recipient_hash('email','person@example.invalid')
     with psycopg.connect(temp.admin_dsn) as admin:
-        assert admin.execute('SELECT recipient_hash FROM message_opt_out').fetchone()[0]==expected
-        assert admin.execute('SELECT recipient_hash FROM message_outbox').fetchone()[0]==expected
+        assert admin.execute('SELECT recipient_hash FROM message_opt_out').fetchone()==(expected,)
+        assert admin.execute('SELECT recipient_hash FROM message_outbox').fetchone()==(expected,)
     other=OutboxStore(db,keys=Keys(SECRET[::-1]))
     assert other.create(w,'other-key','email','person@example.invalid','hi','plain')['status']=='queued'
     DeliveryWorker(s,{'email':adapter}).run_one(w)

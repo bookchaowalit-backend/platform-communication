@@ -21,7 +21,8 @@ def render_template(template,body):
     if template=='html':return '<p>'+html.escape(body).replace('\n','<br>')+'</p>'
     raise InvalidInput('Unknown template')
 class HTTPAdapter:
-    blocked_marker=None
+    blocked_marker:bytes|None=None
+    configured:bool=False
     def __init__(self,*,transport=None):self.transport=transport
     def request(self,url,**kwargs):
         if not self.configured:raise DeliveryError('dead')
@@ -38,11 +39,12 @@ class HTTPAdapter:
                         if monotonic()>deadline:raise DeliveryError('uncertain')
                         data.extend(chunk)
                         if len(data)>65536:raise DeliveryError('uncertain')
-                    if response.status_code==403:raise DeliveryError('dead',opt_out=self.blocked_marker in data)
+                    if response.status_code==403:raise DeliveryError('dead',opt_out=self.blocked_marker is not None and self.blocked_marker in data)
                     import json
                     return json.loads(data)
         except DeliveryError:raise
         except Exception:raise DeliveryError('uncertain') from None  # noqa: BLE001 - provider errors are redacted
+    def send(self,m)->str:raise NotImplementedError
 class ResendAdapter(HTTPAdapter):
     def __init__(self,api_key=None,sender=None,*,unsubscribe_url=None,**kwargs):
         super().__init__(**kwargs);self.key=api_key;self.sender=sender;self.unsubscribe_url=unsubscribe_url
