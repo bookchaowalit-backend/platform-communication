@@ -35,7 +35,7 @@ Sources: `railway.toml`, `Dockerfile`, `src/platform_communication/__main__.py`,
 
 ## Open questions
 
-- public domain เต็มของ service (ops record ให้เพียงชื่อ `communication-api-production`)
+- ~~public domain เต็มของ service~~ ตอบแล้ว 2026-11-04: `https://communication-api-production.up.railway.app` (platform-api-gateway `routes.json` @ `4a31ff5`, route `platform-communication`)
 - `main` ปัจจุบันคือ `3a35541` (CI only) แต่ ops record ระบุ CLI deploy ล่าสุดที่ `bea8412`: commit ที่รันอยู่จริงคืออะไร
 - Railway service สำหรับ `worker` และ `COMMUNICATION_WORKSPACE_ID` มีหรือยัง; migrate รันด้วย role ใด
 - Railway sleep ทำให้ worker loop (poll 0.5 s) หลับด้วยหรือไม่ ถ้า deploy เป็น serverless

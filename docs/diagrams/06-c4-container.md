@@ -6,6 +6,7 @@ image เดียว (`Dockerfile`) รันได้ 3 คำสั่ง: `s
 C4Container
   title platform-communication - Containers
   System_Ext(caller, "Caller", "Bearer JWT")
+  System_Ext(gw, "Edge API gateway", "gateway.bookchaowalit.com")
   Person(recipient, "Recipient")
   System_Ext(identity, "platform-identity JWKS", "/.well-known/jwks.json")
   System_Ext(providers, "Providers", "Resend, Twilio, FCM, Telegram")
@@ -16,7 +17,9 @@ C4Container
     Container(migrate, "communication migrate", "Python 3.12 one-off", "MigrationRunner namespace communication, DDL role")
     ContainerDb(db, "PostgreSQL", "Neon, PG 16+", "message_outbox, message_opt_out, platform_schema_migrations")
   }
-  Rel(caller, api, "HTTPS /v1/messages, /v1/opt-outs")
+  Rel(caller, gw, "HTTPS /v1/platform-communication/...")
+  Rel(gw, api, "Proxy")
+  Rel(caller, api, "Direct HTTPS /v1/messages, /v1/opt-outs")
   Rel(recipient, api, "/v1/unsubscribe")
   Rel(api, identity, "JWKS fetch, 5 s timeout, no redirect")
   Rel(api, db, "Runtime role, pool max 8, statement timeout 10 s")
@@ -26,7 +29,7 @@ C4Container
   Rel(api, sentry, "Errors")
 ```
 
-Sources: `Dockerfile`, `railway.toml`, `src/platform_communication/__main__.py`, `src/platform_communication/app.py`, `src/platform_communication/worker.py`, `src/platform_communication/adapters.py`, `src/platform_communication/_sentry.py`, `docs/runtime.md`, platform-backend-core `src/platform_backend_core/db.py`, `auth.py`, `migrations.py` at `21d5f44`
+Sources: `Dockerfile`, `railway.toml`, `src/platform_communication/__main__.py`, `src/platform_communication/app.py`, `src/platform_communication/worker.py`, `src/platform_communication/adapters.py`, `src/platform_communication/_sentry.py`, `docs/runtime.md`, platform-backend-core `src/platform_backend_core/db.py`, `auth.py`, `migrations.py` at `21d5f44`, platform-api-gateway `routes.json` @ `4a31ff5`
 
 ## Open questions
 

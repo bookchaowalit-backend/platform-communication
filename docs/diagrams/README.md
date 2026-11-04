@@ -6,6 +6,8 @@ repo นี้คือ central platform service `communication`: durable outbox
 
 ทุกไฟล์มี `Sources:` ใต้ภาพ และ "Open questions" สำหรับสิ่งที่ยืนยันจากโค้ดไม่ได้; ข้อเท็จจริง hosting ที่ไม่อยู่ใน repo อ้าง `ops record: book-platforms-status (2026-11-03)`
 
+สรุปสถาปัตยกรรมระดับระบบ (style, quality attributes, integrations, fitness functions): [`DOCPACK/02-architecture.md`](../../DOCPACK/02-architecture.md)
+
 | # | Item | Status | File | Sources read |
 |---|---|---|---|---|
 | 01 | Business process As-Is / To-Be | done | [01-business-process.md](01-business-process.md) | `app.py`, `store.py`, `worker.py`, `PRODUCT.md`, `docs/runtime.md`, BOO-150 gate |
