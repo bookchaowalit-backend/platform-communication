@@ -14,7 +14,7 @@ related: 00-product-card.md, ../docs/diagrams/README.md, ../docs/runtime.md, ../
 เอกสารนี้สรุปสถาปัตยกรรมของ platform `communication` จากโค้ดและ config ใน repo (ณ `origin/main` `f88cd54`, 2026-11-04) รายละเอียดอยู่ใน Core 22 diagram pack [`docs/diagrams/`](../docs/diagrams/README.md) และ [`docs/runtime.md`](../docs/runtime.md); เอกสารนี้ลิงก์ ไม่คัดลอก
 ข้อเท็จจริง hosting ที่ไม่อยู่ใน repo อ้าง `ops record: book-platforms-status (2026-11-03)` และ `ops record: api-gateway-edge (2026-11-03)`
 
-หมายเหตุ tier และความขัดแย้งของเอกสาร: `docpack.yaml` ยังเป็น `tier: L0`; `README.md`, `PRODUCT.md`, `contract.json` (status `scaffolded`) และ staging plan ใน `docs/runtime.md` ("not executed") บอกว่ายังไม่ deploy แต่ ops record ระบุว่า `communication-api-production` live (CLI deploy `bea8412`, `/readyz` 200) เอกสารนี้ใช้ ops record สำหรับสถานะ hosting และไม่เปลี่ยน tier
+หมายเหตุ tier และความขัดแย้งของเอกสาร: `docpack.yaml` ยังเป็น `tier: L0`; `README.md`, `PRODUCT.md`, `contract.json` (status `scaffolded`) และ staging plan ใน `docs/runtime.md` ("not executed") บอกว่ายังไม่ deploy แต่ ops record ระบุว่า `communication-api-production` live (CLI deploy `bea8412`, `/readyz` 200) เอกสารนี้ใช้ ops record สำหรับสถานะ hosting และไม่เปลี่ยน tier อัปเดต 2026-11-10: README/PRODUCT/runtime.md แก้ให้ตรงกับ hosting แล้ว (contract.json คง `scaffolded` ตาม activation guard) และมี cron worker `communication-worker` แล้ว
 
 ## 1. Architecture style และเหตุผล
 
@@ -124,7 +124,7 @@ flowchart TB
   OP["Owner: git archive main → railway up --ci"] --> SVC
   subgraph RW["Railway (asia-southeast1-eqsg3a, sleep on)"]
     SVC["communication-api-production: CMD serve, PORT 8080, healthcheck /readyz"]
-    WRK["worker service: ไม่ยืนยัน"]
+    WRK["communication-worker: Railway cron */30, worker --until-empty, heartbeat"]
   end
   GW["gateway.bookchaowalit.com"] --> SVC
   SVC --> DB[("Neon platform-communication")]
@@ -134,7 +134,7 @@ flowchart TB
 ```
 
 - ตัวแปร (ชื่อเท่านั้น): `DATABASE_URL`, `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_JWKS_URL` หรือ `JWT_PUBLIC_KEY`, `COMMUNICATION_SECRET`, `COMMUNICATION_PUBLIC_URL`, `COMMUNICATION_WORKSPACE_ID` (worker), `RESEND_API_KEY`, `RESEND_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `FCM_PROJECT_ID`, `FCM_ACCESS_TOKEN`, `TELEGRAM_BOT_TOKEN`, `SENTRY_DSN`, `PORT`
-- environment เดียว (production); staging plan ใน `docs/runtime.md` ยังไม่ทำ
+- environment เดียว (production); staging plan ใน `docs/runtime.md` ถูกข้ามไป (deploy production ตรง)
 
 ## 9. ADR สำคัญ
 
@@ -175,15 +175,15 @@ flowchart TB
 
 ## Open questions
 
-- มี Railway service `worker` และ `COMMUNICATION_WORKSPACE_ID` แล้วหรือยัง; ถ้าไม่มี ข้อความค้าง `queued` ทั้งหมด และ worker บน serverless sleep ด้วยหรือไม่
+- ~~มี Railway service `worker` แล้วหรือยัง~~ ตอบแล้ว 2026-11-10: `communication-worker` เป็น Railway cron ทุก 30 นาที (`worker --until-empty`, ไม่ใช่ always-on เพราะ poll 0.5 วินาทีจะทำให้ Neon ตื่นตลอด ~182 CU-h/เดือน เกินโควตาฟรี 100) `COMMUNICATION_WORKSPACE_ID` = owner workspace; smoke email ถึง `delivered`
 - worker ส่งได้ทีละ workspace (`COMMUNICATION_WORKSPACE_ID` เดียว): จะรองรับหลาย workspace อย่างไร
-- channel ไหน configured จริงใน production (`RESEND_FROM` ยังเป็น owner follow-up)
+- channel ใน production: email (Resend, `RESEND_FROM` ตั้งแล้ว 2026-11-09) และ Telegram มีตัวแปร; SMS (Twilio) และ push (FCM) ยังไม่ตั้ง
 - commit ที่รันจริง: ops record ระบุ CLI deploy `bea8412`; main คือ `f88cd54`
 - consumer contract (BOO-150: `POST /v1/notifications`, `dedupe_key`, `recipient_ref`) ต่างจาก runtime (`/v1/messages`, `Idempotency-Key`, raw `recipient`): จะทำ adapter หรือแก้ contract
 - retention ของ raw recipient/body ใน `message_outbox` และ backup/restore drill (14)
 - worker/startup errors ไม่ถึง Sentry (`__main__` แปลงเป็น `SystemExit`)
 - `/metrics`, `/docs`, `/openapi.json` เปิดไม่ต้อง auth (12, 13)
-- เอกสาร `README.md`, `PRODUCT.md`, `contract.json` ยังบอกว่าไม่ deploy
+- ~~เอกสารยังบอกว่าไม่ deploy~~ แก้แล้ว 2026-11-10 ยกเว้น `contract.json` status ที่ต้องรอ activation evidence
 
 ## การอนุมัติ
 

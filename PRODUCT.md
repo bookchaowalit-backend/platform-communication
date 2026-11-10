@@ -27,12 +27,13 @@ A boundary contract with offline evidence, not a running service. The delivery g
 
 ## Operating Context
 
-- Status: `scaffolded`; DOCPACK verdict: `template`. The runtime is not activated; the current
-  implementation is `infra/services/notifier` in the parent registry and the hosted `platform-notifications-api`.
+- Status: `scaffolded`; DOCPACK verdict: `template`. The runtime is hosted (API `communication-api`,
+  cron worker `communication-worker` every 30 minutes, since 2026-11-10) but the contract is not yet
+  activated; the task digest still runs in `platform-notifications-api`.
 - CI: shared `ci-python` (Ruff and `scripts/check.sh` on Python 3.11 and 3.12) and the shared
   security workflow, on GitHub-hosted runners (public repository).
-- Sentry does not apply: nothing runs in production. Add it in the change that activates a
-  runtime.
+- Sentry: `SENTRY_DSN` is set on both services (scrubbing in `src/platform_communication/_sentry.py`).
+  The cron worker also posts the uptime heartbeat `communication-worker` (counts only).
 - The open `codex/shared-infrastructure-20261015` pull request (decision D8) is outside this
   document.
 

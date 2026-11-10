@@ -1,16 +1,17 @@
 # Communication runtime pilot
 
-Status: implemented and locally verified; deployment artifacts staged only.
-Correlation: `SHARED-INFRA-2026-10-15`. No production activation or provider
-acceptance is claimed. The legacy contract's scaffolded migration marker stays
+Status: hosted on Railway. API `communication-api` (CLI deploy) and cron worker
+`communication-worker` (every 30 minutes, since 2026-11-10); email via Resend smoke-tested to
+`delivered` on 2026-11-10. Correlation: `SHARED-INFRA-2026-10-15`. Contract activation
+is not claimed yet. The legacy contract's scaffolded migration marker stays
 unchanged because its guard requires activation evidence.
 
 ## Installation and lifecycle
 
 Python >=3.12, PostgreSQL >=16. Nothing is published to PyPI. Local editing
 uses `pip install -e . --no-deps` after installing the reviewed core and runtime
-dependencies. `railway.toml` is a reference release asset; no Railway deployment
-has been executed here.
+dependencies. `railway.toml` deploys the API; `railway.worker.toml` (copied over
+`railway.toml` in the upload) deploys the cron worker.
 
 ### Container image
 
@@ -114,6 +115,9 @@ Production runs it as the Railway cron service `communication-worker` every 30 m
 (`railway.worker.toml`), so a queued message waits at most ~30 minutes and the Neon database
 can scale to zero between runs. The default mode (no flag) keeps polling every 0.5 seconds;
 do not run it on the free Neon plan: it keeps compute awake (~182 CU-h/month vs 100).
+With `HEARTBEAT_URL` (https) and `HEARTBEAT_TOKEN` set, each `--until-empty` run posts
+`{"ok", "failed", "handled"}` (counts only) and a failed run posts `ok: false` before exiting
+(`_heartbeat.py`); the uptime monitor alerts when job `communication-worker` is silent for 2 hours.
 
 Delivery attempts are bounded with exponential delay capped at 3600 seconds.
 A known 429 rejection retries; 4xx permanent rejection becomes dead; redirects,
@@ -263,7 +267,7 @@ had against main's Ruff gate.
   never show the address and send `no-store`, `no-referrer` and a CSP that allows no
   scripts. These routes need no JWT: the signed token is the authority.
 
-## Staging plan (not executed) — first possible date 2026-11-01
+## Staging plan (superseded: production was deployed directly; kept for history)
 
 Blocked until then: the Neon `empire-platform` free compute quota is exhausted
 until 2026-11-01 and Railway deploys stop at an approval step. Each step below

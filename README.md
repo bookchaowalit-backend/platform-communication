@@ -6,15 +6,17 @@
 
 This repository owns the `communication` capability: email, SMS, push, templates, delivery status.
 The current source implementation is recorded as `infra/services/notifier` in the
-parent registry. This checkout includes an optional, locally implemented runtime pilot. Its legacy
-contract remains scaffolded pending activation evidence; no production activation
-is claimed.
+parent registry. This checkout includes the runtime, which is hosted on Railway: the API
+`communication-api` (CLI deploy) and the delivery worker `communication-worker` (Railway cron
+every 30 minutes, `worker --until-empty`, since 2026-11-10; see `docs/runtime.md`). Email via
+Resend was smoke-tested to `delivered` on 2026-11-10. The legacy contract status below stays
+`scaffolded` until its activation guard records evidence.
 
 ## Boundary
 
 - Owner: `bookchaowalit-backend`
 - Repository: `platform-communication`
-- Target remote: `https://github.com/bookchaowalit-backend/platform-communication.git` (published; runtime not activated)
+- Target remote: `https://github.com/bookchaowalit-backend/platform-communication.git` (published; runtime hosted, contract not yet activated)
 - Contract: `book-platform.contract.v1`
 - Status: `scaffolded`
 - Data owner: the platform boundary identified in `contract.json`

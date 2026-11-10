@@ -8,6 +8,28 @@ from .app import create_app
 from .migrations import MIGRATIONS
 
 
+def _worker(*,until_empty):
+    import signal
+    from uuid import UUID
+
+    from ._drain import drain
+    from .adapters import configured_adapters
+    from .store import OutboxStore
+    from .worker import DeliveryWorker
+    workspace=UUID(os.environ['COMMUNICATION_WORKSPACE_ID'])
+    adapters=configured_adapters()
+    if not any(a.configured for a in adapters.values()):raise ValueError('No delivery adapters')
+    database=Database(os.environ['DATABASE_URL'])
+    worker=DeliveryWorker(OutboxStore(database),adapters)
+    running=True
+    def stop(*args):
+        nonlocal running
+        running=False
+    signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
+    try:return drain(worker,workspace,until_empty=until_empty,running=lambda:running)
+    finally:database.close()
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['serve','migrate','worker'])
     p.add_argument('--until-empty',action='store_true',help='worker: drain due messages, then exit (for a scheduled job)')
@@ -17,25 +39,12 @@ def main():
             MigrationRunner(os.environ['DATABASE_URL'],namespace='communication').apply(MIGRATIONS)
             return
         if args.command=='worker':
-            import signal
-            from uuid import UUID
-
-            from ._drain import drain
-            from .adapters import configured_adapters
-            from .store import OutboxStore
-            from .worker import DeliveryWorker
-            workspace=UUID(os.environ['COMMUNICATION_WORKSPACE_ID'])
-            adapters=configured_adapters()
-            if not any(a.configured for a in adapters.values()):raise ValueError('No delivery adapters')
-            database=Database(os.environ['DATABASE_URL'])
-            worker=DeliveryWorker(OutboxStore(database),adapters)
-            running=True
-            def stop(*args):
-                nonlocal running
-                running=False
-            signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
-            try:drain(worker,workspace,until_empty=args.until_empty,running=lambda:running)
-            finally:database.close()
+            from . import _heartbeat
+            try:handled=_worker(until_empty=args.until_empty)
+            except BaseException:
+                if args.until_empty:_heartbeat.send(False,0)  # a failed cron run alerts now
+                raise
+            if args.until_empty:_heartbeat.send(True,handled)
             return
         verifier=TokenVerifier(issuer=os.environ['JWT_ISSUER'],audience=os.environ['JWT_AUDIENCE'],public_key=os.environ.get('JWT_PUBLIC_KEY'),jwks_url=os.environ.get('JWT_JWKS_URL'))
         app=create_app(Database(os.environ['DATABASE_URL']),verifier)

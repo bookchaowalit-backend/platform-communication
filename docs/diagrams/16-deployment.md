@@ -8,7 +8,7 @@ flowchart LR
   subgraph RW["Railway, region asia-southeast1-eqsg3a, sleep on"]
     SVC["communication-api-production: Dockerfile, CMD serve, PORT 8080, UID 65532"]
     HC["healthcheckPath /readyz, timeout 30 s, restart ON_FAILURE x3"]
-    WRK["worker service: not confirmed"]
+    WRK["communication-worker: Railway cron */30, worker --until-empty → heartbeat"]
   end
   subgraph NEON["Neon (own project per service)"]
     DB[("communication database")]

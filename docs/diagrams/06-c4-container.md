@@ -13,7 +13,7 @@ C4Container
   System_Ext(sentry, "Sentry")
   Container_Boundary(b, "platform-communication") {
     Container(api, "communication serve", "Python 3.12, FastAPI, uvicorn", "API on PORT 8080, limit_concurrency 100")
-    Container(worker, "communication worker", "Python 3.12", "Sequential loop for COMMUNICATION_WORKSPACE_ID, sleeps 0.5 s when idle")
+    Container(worker, "communication worker", "Python 3.12", "Railway cron */30: worker --until-empty drains COMMUNICATION_WORKSPACE_ID and exits")
     Container(migrate, "communication migrate", "Python 3.12 one-off", "MigrationRunner namespace communication, DDL role")
     ContainerDb(db, "PostgreSQL", "Neon, PG 16+", "message_outbox, message_opt_out, platform_schema_migrations")
   }
@@ -33,6 +33,6 @@ Sources: `Dockerfile`, `railway.toml`, `src/platform_communication/__main__.py`,
 
 ## Open questions
 
-- ops record: book-platforms-status (2026-11-03) ระบุเพียง service `communication-api-production`; ไม่ยืนยันว่ามี Railway service สำหรับ `worker` (ถ้าไม่มี ข้อความจะค้าง `queued`)
+- ~~ไม่ยืนยันว่ามี Railway service สำหรับ `worker`~~ 2026-11-10: Railway cron `communication-worker` ทุก 30 นาที
 - worker ไม่มีเส้นทางส่ง error ไป Sentry ที่หาเจอในโค้ด: `__main__.main` แปลงทุก exception เป็น `SystemExit` (Python ไม่เรียก excepthook สำหรับ `SystemExit`) และ `_sentry.capture()` ไม่ถูกเรียกที่ใด (ดู [20](20-observability.md))
-- worker ไม่มี HTTP port จึงไม่มี healthcheck; จะตรวจว่า worker ทำงานอยู่อย่างไร
+- worker ไม่มี HTTP port: ตรวจด้วย uptime heartbeat `communication-worker` (2 ชม., `_heartbeat.py`) แทน healthcheck
