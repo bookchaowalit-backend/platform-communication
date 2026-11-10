@@ -11,7 +11,8 @@ listed there is missing from this page.
 - Depends on: `identity`, `workflow`, `observability`
 
 Interfaces marked `current-in-solo-empire` are served by the `solo-empire`
-control plane today. This repository does not serve them yet; they are the
+control plane today. This repository does not serve them (its own runtime has a different API,
+see "Out of scope"); they are the
 compatibility surface a migration must preserve. The `source` column is a path
 in the implementing repository.
 
@@ -56,6 +57,10 @@ runtime) and the accepted caller contract in
 
 ## Out of scope
 
-No production provider integration, credential, database writer or customer
-payload lives in this repository. Record parity, privacy and rollback evidence
-in the parent platform registry before any cutover.
+Since 2026-11-10 this repository also runs its own delivery service (`communication-api` and the
+cron `communication-worker`, see [`runtime.md`](runtime.md)). Its routes (`/v1/messages`,
+`/v1/opt-outs`, `/v1/unsubscribe`) are not the interfaces listed above, and no consumer of
+those interfaces has moved; the rule-by-rule comparison with the accepted consumer contract
+is in the BOO-150 gate doc, section "Runtime mapping (2026-11-10)". Provider credentials live in
+Infisical and Railway, never in this repository. Record parity, privacy and rollback evidence in
+the parent platform registry before any cutover.

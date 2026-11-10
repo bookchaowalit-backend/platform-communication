@@ -178,8 +178,8 @@ flowchart TB
 - ~~มี Railway service `worker` แล้วหรือยัง~~ ตอบแล้ว 2026-11-10: `communication-worker` เป็น Railway cron ทุก 30 นาที (`worker --until-empty`, ไม่ใช่ always-on เพราะ poll 0.5 วินาทีจะทำให้ Neon ตื่นตลอด ~182 CU-h/เดือน เกินโควตาฟรี 100) `COMMUNICATION_WORKSPACE_ID` = owner workspace; smoke email ถึง `delivered`
 - worker ส่งได้ทีละ workspace (`COMMUNICATION_WORKSPACE_ID` เดียว): จะรองรับหลาย workspace อย่างไร
 - channel ใน production: email (Resend, `RESEND_FROM` ตั้งแล้ว 2026-11-09) และ Telegram มีตัวแปร; SMS (Twilio) และ push (FCM) ยังไม่ตั้ง
-- commit ที่รันจริง: ops record ระบุ CLI deploy `bea8412`; main คือ `f88cd54`
-- consumer contract (BOO-150: `POST /v1/notifications`, `dedupe_key`, `recipient_ref`) ต่างจาก runtime (`/v1/messages`, `Idempotency-Key`, raw `recipient`): จะทำ adapter หรือแก้ contract
+- ~~commit ที่รันจริงไม่ตรงกับ main~~ แก้แล้ว 2026-11-10: API และ worker deploy จาก main `20227c2`
+- consumer contract (BOO-150: `POST /v1/notifications`, `dedupe_key`, `recipient_ref`) ต่างจาก runtime (`/v1/messages`, `Idempotency-Key`, raw `recipient`): บันทึกตารางเทียบทีละกฎแล้ว 2026-11-10 ใน gate doc หัวข้อ "Runtime mapping (2026-11-10)"; ยังต้องให้ owner เลือกว่าจะทำ adapter หรือแก้ contract และใช้ runtime ไหน
 - ~~retention ของ body~~ แก้แล้ว 2026-11-10 (ล้าง content หลัง 30 วัน); raw recipient ยังอยู่ถาวร และ backup/restore drill ยังค้าง (14)
 - worker/startup errors ไม่ถึง Sentry (`__main__` แปลงเป็น `SystemExit`)
 - ~~`/metrics`, `/docs`, `/openapi.json` เปิดไม่ต้อง auth~~ แก้แล้ว 2026-11-10: ไม่เสิร์ฟ docs/schema, `/metrics` ต้องมี scope `metrics:read` (12, 13)

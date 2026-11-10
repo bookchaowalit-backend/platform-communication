@@ -132,13 +132,43 @@ were `proposed` are now `accepted-not-implemented` in the fixture and the consum
 ### Still open after the decision
 
 - Registry `source_paths` update (item 4) and the stale `contract.json` `interfaces[].source` paths.
-- Choosing the runtime (current platform-notifications-api or PR #1) that implements the
+- Choosing the runtime (current platform-notifications-api or this repository's runtime, PR #1, live since 2026-11-10; see "Runtime mapping") that implements the
   `accepted-not-implemented` rules: opt-out store and `POST /v1/opt-outs`, `recipient_ref`,
   LINE `X-Line-Retry-Key`, dead-stops-retry, and routing LINE `unfollow` from `/api/webhook/line`.
 - Parity and rollback evidence, then a separate cutover decision. Accepting the contract is not a
   cutover: no status change, runtime move or consumer change follows from it. This document does
   not claim any production state.
 - A scheduled server-parity run against upstream `main` (today's tripwire reads the pinned SHA).
+
+## Runtime mapping (2026-11-10)
+
+This repository now runs its own service: `communication-api` and the cron `communication-worker`
+on Railway (main `20227c2`). It does **not** serve this contract. Its API is `POST/GET /v1/messages`,
+`POST /v1/opt-outs` and the one-click `/v1/unsubscribe` (see `docs/runtime.md`). The accepted contract
+is unchanged; this table records how far the live runtime goes for each rule. No consumer has moved
+to it and no cutover decision has been taken.
+
+| Contract rule | Contract shape | platform-communication runtime | Match |
+|---|---|---|---|
+| Queue | `POST /v1/notifications`, `title`/`message`/`notification_type`, 201 `outcome` | `POST /v1/messages`, `channel`/`recipient`/`body` (+ `subject`, `template`, `max_attempts`), 202 with the message row | different API |
+| Idempotency | `dedupe_key` (8..200) in the body; repeat returns `existing` | `Idempotency-Key` header (1..128); exact replay returns the same row, a changed payload returns 409 | same rule, different shape |
+| Recipient | opaque `recipient_ref`; addresses stay inside the boundary | raw `recipient` from the caller (email, E.164, FCM token, Telegram chat id); opt-outs store only an HMAC hash | **no**: callers pass addresses |
+| Auth | automation token, `notifications.notification:read/write` | identity JWT, scopes `messages:read`, `messages:write`, `opt-outs:write` | different scopes |
+| Record delivery | caller posts `/v1/notifications/{id}/delivery` | the worker records the outcome itself; callers only read status | different model |
+| Retry ceiling | `max_attempts` 3, at-least-once | default 3 (caller may set 1..10), at-least-once, backoff 2^attempts s (max 1 h) | yes (default) |
+| Dead stops retry | non-429 4xx is terminal | 4xx except 429 → `dead`; 429 → retry; 5xx, redirects, timeouts → `uncertain`, never retried automatically | yes, and stricter on uncertain |
+| Provider idempotency key | LINE `X-Line-Retry-Key` only | Resend gets `Idempotency-Key: message/<id>`; Twilio, FCM and Telegram get none; no LINE adapter | partly (other providers) |
+| Opt-out route | `POST /v1/opt-outs` with `recipient_ref`, `channel`, `source`, `event_id`; `created`/`existing` | `POST /v1/opt-outs` with raw `recipient`, `channel` (or `*`), `source`, `event_id`; 201 `created` / 200 `existing`; event-id reuse for another address → 409 | yes, except `recipient_ref` |
+| Opt-out enforced before send, no attempt counted | yes | checked at claim and again just before send; status `suppressed`, attempt given back | yes (`suppressed` status instead of `delivery_error=opted_out`) |
+| Opt-out signals | `line.unfollow`, `telegram.blocked`, `email.list_unsubscribe`, `owner.global` | sources `owner.global`, `email.list_unsubscribe` (RFC 8058 one-click link in every email), `provider.blocked` (Telegram "bot was blocked") | no LINE |
+| Inbound LINE webhook | `/api/webhook/line` unfollow → opt-out | not routed | **no** |
+| Providers | telegram, line, slack, email, console | email (Resend, live), telegram (configured), sms (Twilio) and push (FCM) coded but not configured | different set |
+| Privacy of errors | short codes, no tokens in logs | provider errors reduced to an outcome; Sentry gets no free text | yes |
+
+Gaps a cutover would still need, if the owner picks this runtime: `recipient_ref` (or an owner
+decision to accept raw recipients), the LINE adapter and unfollow routing, slack/console if still
+wanted, and a caller adapter from the `/v1/notifications` shape. Which runtime implements the
+contract is still the owner's decision (see "Still open").
 
 ## Verification
 
