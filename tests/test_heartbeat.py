@@ -58,6 +58,12 @@ class HeartbeatTest(unittest.TestCase):
         self.assertFalse(_hb.send(True, 1, env={"HEARTBEAT_URL": "http://monitor.example/x", "HEARTBEAT_TOKEN": "t"}, opener=rec))
         self.assertEqual(rec.requests, [])
 
+    def test_default_opener_refuses_redirects(self):
+        # A redirect must not carry the bearer token to another URL.
+        handler = _hb._NoRedirect()
+        req = _hb.urllib.request.Request(URL, headers={"Authorization": "Bearer t"})
+        self.assertIsNone(handler.redirect_request(req, None, 302, "Found", {}, "https://evil.example/"))
+
     def test_network_error_is_swallowed(self):
         rec = Recorder(fail=True)
         self.assertFalse(_hb.send(True, 1, env={"HEARTBEAT_URL": URL, "HEARTBEAT_TOKEN": "t"}, opener=rec))
