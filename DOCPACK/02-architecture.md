@@ -97,7 +97,7 @@ image เดียวรันได้ 3 คำสั่ง (`__main__.py`): `s
 | ตาราง `message_opt_out` | `recipient_hash` (HMAC), channel/wildcard, source, event id | forced RLS, ไม่เก็บ address | `migrations.py`, ADR-0004 |
 | `platform_schema_migrations` | checksum migration | readiness | core `MigrationRunner` |
 
-ไม่มี retention/purge ของ `message_outbox` ในโค้ด (raw recipient และ body อยู่ถาวร): ดู Open questions
+Retention (2026-11-10): ทุกรอบ `worker --until-empty` ล้าง `body` และ `subject` ของข้อความ `delivered/dead/suppressed` ที่เก่ากว่า `COMMUNICATION_RETENTION_DAYS` (ค่าเริ่มต้น 30 วัน) ด้วย UPDATE เพราะ runtime role ไม่มีสิทธิ์ DELETE; recipient ยังเก็บไว้เพื่อให้ลิงก์ unsubscribe ในอีเมลเก่ายังใช้ได้ และไม่มีการลบแถว
 
 ## 7. Integrations
 
@@ -180,9 +180,9 @@ flowchart TB
 - channel ใน production: email (Resend, `RESEND_FROM` ตั้งแล้ว 2026-11-09) และ Telegram มีตัวแปร; SMS (Twilio) และ push (FCM) ยังไม่ตั้ง
 - commit ที่รันจริง: ops record ระบุ CLI deploy `bea8412`; main คือ `f88cd54`
 - consumer contract (BOO-150: `POST /v1/notifications`, `dedupe_key`, `recipient_ref`) ต่างจาก runtime (`/v1/messages`, `Idempotency-Key`, raw `recipient`): จะทำ adapter หรือแก้ contract
-- retention ของ raw recipient/body ใน `message_outbox` และ backup/restore drill (14)
+- ~~retention ของ body~~ แก้แล้ว 2026-11-10 (ล้าง content หลัง 30 วัน); raw recipient ยังอยู่ถาวร และ backup/restore drill ยังค้าง (14)
 - worker/startup errors ไม่ถึง Sentry (`__main__` แปลงเป็น `SystemExit`)
-- `/metrics`, `/docs`, `/openapi.json` เปิดไม่ต้อง auth (12, 13)
+- ~~`/metrics`, `/docs`, `/openapi.json` เปิดไม่ต้อง auth~~ แก้แล้ว 2026-11-10: ไม่เสิร์ฟ docs/schema, `/metrics` ต้องมี scope `metrics:read` (12, 13)
 - ~~เอกสารยังบอกว่าไม่ deploy~~ แก้แล้ว 2026-11-10 ยกเว้น `contract.json` status ที่ต้องรอ activation evidence
 
 ## การอนุมัติ

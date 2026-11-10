@@ -48,7 +48,8 @@ Dockerfile and `[tool.uv.sources]` together; the tests fail on any mismatch.
 - Optional `SENTRY_DSN` turns on error reporting (unset = off); see
   `src/platform_communication/_sentry.py` for what is scrubbed (no bodies, headers, URLs,
   recipients, emails or phone numbers). `SENTRY_ENVIRONMENT` defaults to `production`.
-- `GET /healthz`, `/readyz`, `/metrics` use shared redacted diagnostics.
+- `GET /healthz` and `/readyz` are public probes; `GET /metrics` needs the `metrics:read`
+  scope (2026-11-10). No generated `/docs`, `/redoc` or `/openapi.json` is served.
   Readiness checks exact applied migration versions/checksums, table RLS, effective
   schema USAGE/history SELECT and every required table operation individually;
   missing schema returns generic 503. Setup and serving are separate commands.
@@ -78,8 +79,8 @@ policy and full provider acceptance belong to integration/release gates.
 Rollback stops this optional runtime and restores consumers to the previous
 adapter. Do not downgrade applied SQL or overwrite a live database. Restore
 only to a new isolated database and verify synthetic workspace reads before
-cutover. Coordinate retention and backup encryption with the owning operator;
-no scheduled deletion or backup credential access is implemented here.
+cutover. Coordinate backup encryption with the owning operator; no scheduled deletion or
+backup credential access is implemented here (retention clears content, see below).
 
 ## Outbox API and workers
 
@@ -156,8 +157,12 @@ Protocol references checked 2026-10-15:
 [FCM](https://firebase.google.com/docs/cloud-messaging/send/v1-api),
 [Telegram](https://core.telegram.org/bots/api#sendmessage).
 No real external messages, delivery credentials or customer data were used.
-Configure retention for terminal message content before production; the pilot
-preserves records for reconciliation and has no automatic destructive purge.
+Retention (2026-11-10): each `worker --until-empty` run clears `body` and `subject` of
+`delivered`, `dead` and `suppressed` messages older than `COMMUNICATION_RETENTION_DAYS`
+(default 30, 7..3650; a bad value fails the run). It is an UPDATE: the runtime role has
+no DELETE. Ids, status, recipient and its hash stay, so replays, reconciliation and
+unsubscribe links in old emails still work. `queued`, `sending` and `uncertain` rows
+keep their content. No rows are deleted; that would need an owner-granted DELETE.
 
 ## Local verification record — 2026-10-15
 

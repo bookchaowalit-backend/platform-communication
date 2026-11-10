@@ -12,21 +12,25 @@ def _worker(*,until_empty):
     import signal
     from uuid import UUID
 
-    from ._drain import drain
+    from ._drain import drain, retention_days, scheduled_run
     from .adapters import configured_adapters
     from .store import OutboxStore
     from .worker import DeliveryWorker
     workspace=UUID(os.environ['COMMUNICATION_WORKSPACE_ID'])
     adapters=configured_adapters()
     if not any(a.configured for a in adapters.values()):raise ValueError('No delivery adapters')
+    keep_days=retention_days(os.environ)  # a bad value fails before any message is sent
     database=Database(os.environ['DATABASE_URL'])
-    worker=DeliveryWorker(OutboxStore(database),adapters)
+    store=OutboxStore(database)
+    worker=DeliveryWorker(store,adapters)
     running=True
     def stop(*args):
         nonlocal running
         running=False
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
-    try:return drain(worker,workspace,until_empty=until_empty,running=lambda:running)
+    try:
+        if until_empty:return scheduled_run(worker,store,workspace,keep_days=keep_days,running=lambda:running)
+        return drain(worker,workspace,until_empty=False,running=lambda:running)
     finally:database.close()
 
 

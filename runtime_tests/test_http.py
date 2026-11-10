@@ -91,3 +91,15 @@ def test_readiness_requires_each_effective_privilege(setup,kind,target,privilege
         with psycopg.connect(temp.admin_dsn) as admin:
             admin.execute(sql.SQL('GRANT {} ON {} {} TO {}').format(sql.SQL(privilege),sql.SQL(kind),sql.Identifier(target),sql.Identifier(temp.runtime_role)))
         assert c.get('/readyz').status_code==200
+
+
+def test_docs_are_not_served_and_metrics_need_a_scope(setup):
+    _temp,db,verifier,headers=setup
+    with TestClient(create_app(db,verifier,adapters={})) as c:
+        for path in ('/docs','/docs/oauth2-redirect','/redoc','/openapi.json'):
+            assert c.get(path).status_code==404,path
+        assert c.get('/metrics').status_code==401
+        assert c.get('/metrics',headers=headers('messages:read')).status_code==403
+        response=c.get('/metrics',headers=headers('metrics:read'))
+        assert response.status_code==200 and 'platform_http_requests_total' in response.text
+        assert c.get('/healthz').status_code==200

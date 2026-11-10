@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.routing import APIRoute
 from platform_backend_core import create_app as base_app
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
@@ -26,6 +27,7 @@ class OptOut(BaseModel):
     recipient:str=Field(min_length=1,max_length=512)
     source:str=Field(max_length=32)
     event_id:str=Field(min_length=1,max_length=128)
+NOT_PUBLIC=frozenset({'/docs','/docs/oauth2-redirect','/redoc','/openapi.json','/metrics'})
 def create_app(database,verifier,*,adapters=None):
     app=base_app('communication',database,verifier,max_body_bytes=32768);store=OutboxStore(database)
     # Last in the list = innermost: inside the core boundary that turns errors into a 500.
@@ -34,6 +36,11 @@ def create_app(database,verifier,*,adapters=None):
     app.state.adapters=adapters
     app.state.readiness_checks['outbox_schema']=store.ready
     app.state.readiness_checks['delivery_adapters']=lambda: any(x.configured for x in adapters.values())
+    # Nothing but probes and the API is public: no generated docs or schema, and metrics need a scope.
+    metrics=next(r.endpoint for r in app.router.routes if isinstance(r,APIRoute) and r.path=='/metrics')
+    app.router.routes=[r for r in app.router.routes if getattr(r,'path',None) not in NOT_PUBLIC]
+    app.openapi_url=app.docs_url=app.redoc_url=None
+    app.add_api_route('/metrics',metrics,methods=['GET'],include_in_schema=False,dependencies=[Depends(require_scope('metrics:read'))])
     @app.exception_handler(QueueFull)
     async def full(request,exc):return JSONResponse({'detail':'Outbox capacity reached'},429)
     # Only the domain InvalidInput is a client error; any other exception (an unexpected

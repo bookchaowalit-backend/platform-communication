@@ -113,6 +113,15 @@ class OutboxStore:
         if provider_id is not None and (not isinstance(provider_id,str) or len(provider_id)>256):provider_id=None
         with self.db.transaction(workspace) as c:
             return bool(c.execute("""UPDATE message_outbox SET status=CASE WHEN %s='retry' THEN CASE WHEN attempts>=max_attempts THEN 'dead' ELSE 'queued' END ELSE %s END,run_at=clock_timestamp()+least(3600,power(2,attempts)::int)*interval '1 second',provider_id=%s,lease_token=NULL,lease_until=NULL WHERE id=%s AND lease_token=%s AND status='sending' AND lease_until>clock_timestamp() RETURNING id""",(outcome,outcome,provider_id,id,token)).fetchone())
+    def redact_terminal(self,workspace,older_than_days=30):
+        """Clear body and subject of finished messages older than the window; returns the count.
+
+        Only UPDATE is needed (the runtime role has no DELETE). Recipient, status and ids stay, so
+        idempotent replays, reconciliation and unsubscribe links in old emails keep working."""
+        if type(older_than_days) is not int or not 7<=older_than_days<=3650:raise ValueError('Invalid retention')
+        with self.db.transaction(workspace) as c:
+            return c.execute("""UPDATE message_outbox SET body='',subject=NULL WHERE status IN ('delivered','dead','suppressed')
+                AND created_at<clock_timestamp()-%s*interval '1 day' AND (body<>'' OR subject IS NOT NULL)""",(older_than_days,)).rowcount
     def ready(self):
         with self.db.transaction(UUID(int=0)) as c:
             # Check every operation individually: a comma privilege list means ANY.
