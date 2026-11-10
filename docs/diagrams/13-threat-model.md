@@ -41,7 +41,7 @@ flowchart LR
   SECRET -.-> WK
 ```
 
-Sources: `src/platform_communication/*.py`, platform-backend-core `http.py`, `auth.py`, `db.py` at `21d5f44`, `railway.toml`, `Dockerfile`, ops record: book-platforms-status (2026-11-03) (Railway, Neon per service, identity issuer, Sentry project)
+Sources: `src/platform_communication/*.py`, platform-backend-core `http.py`, `auth.py`, `db.py` at `21d5f44`, `.railway/railway.ts`, `Dockerfile`, ops record: book-platforms-status (2026-11-03) (Railway, Neon per service, identity issuer, Sentry project)
 
 Trust boundaries: Internet → Railway edge → service; service → Neon; service → identity JWKS; service → providers; service → Sentry
 หมายเหตุ: brief กล่าวถึง gateway edge แต่ไม่พบหลักฐานว่า communication อยู่หลัง `gateway.bookchaowalit.com` (ไม่มีใน repo หรือ book-platforms-status) จึงวาด Railway edge ตรง

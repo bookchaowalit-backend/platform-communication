@@ -36,7 +36,7 @@ flowchart LR
   G --> H["Owner checks /readyz 200 and Sentry enabled log"]
 ```
 
-Sources: `git log --first-parent origin/main`, `gh pr list -R bookchaowalit-backend/platform-communication --state all` (#1 closed, #2–#3 and #5–#19 merged, #4 open), `.github/workflows/*.yml`, `railway.toml`, ops record: book-platforms-status (2026-11-03) (deploy recipe, "all CLI-deployed, /readyz 200, `sentry: enabled` logged")
+Sources: `git log --first-parent origin/main`, `gh pr list -R bookchaowalit-backend/platform-communication --state all` (#1 closed, #2–#3 and #5–#19 merged, #4 open), `.github/workflows/*.yml`, `.railway/railway.ts`, ops record: book-platforms-status (2026-11-03) (deploy recipe, "all CLI-deployed, /readyz 200, `sentry: enabled` logged")
 
 - merge แบบ local แล้ว push (`Merge PR #n: ...`); PR #1 ถูก close บน GitHub หลัง merge local (`db278a3`)
 - ไม่มี tag หรือ GitHub release; version ใน `pyproject.toml` ยังเป็น `0.1.0`

@@ -10,8 +10,9 @@ unchanged because its guard requires activation evidence.
 
 Python >=3.12, PostgreSQL >=16. Nothing is published to PyPI. Local editing
 uses `pip install -e . --no-deps` after installing the reviewed core and runtime
-dependencies. `railway.toml` deploys the API; `railway.worker.toml` (copied over
-`railway.toml` in the upload) deploys the cron worker.
+dependencies. Both Railway services deploy the same upload (`git archive` of main, no file
+swap); `.railway/railway.ts` declares their settings: the API (healthcheck `/readyz`) and the
+cron worker (start command, `*/30 * * * *`, restart NEVER).
 
 ### Container image
 
@@ -113,7 +114,7 @@ expired sending becomes `uncertain`, because the send may already have happened.
 
 `worker --until-empty` drains every due message (at most 500 per run), then exits 0.
 Production runs it as the Railway cron service `communication-worker` every 30 minutes
-(`railway.worker.toml`), so a queued message waits at most ~30 minutes and the Neon database
+(`.railway/railway.ts`), so a queued message waits at most ~30 minutes and the Neon database
 can scale to zero between runs. The default mode (no flag) keeps polling every 0.5 seconds;
 do not run it on the free Neon plan: it keeps compute awake (~182 CU-h/month vs 100).
 With `HEARTBEAT_URL` (https) and `HEARTBEAT_TOKEN` set, each `--until-empty` run posts

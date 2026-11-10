@@ -157,7 +157,7 @@ flowchart TB
 | Coverage gate | ≥ 90% (ratchet จาก 90.34% วันที่ 2026-11-03) | `check.yml` `coverage-threshold: "90"` |
 | Lint / type | ruff (E9, F, I, UP, B), mypy | `pyproject.toml` |
 | Security baseline | shared `security.yml` | job `security` |
-| Deploy gate | Railway healthcheck `/readyz` (DB, schema, RLS, privilege, ≥ 1 adapter) | `railway.toml` |
+| Deploy gate | Railway healthcheck `/readyz` (DB, schema, RLS, privilege, ≥ 1 adapter) | `.railway/railway.ts` |
 
 ## 11. เอกสารลงรายละเอียด phase 07
 
@@ -196,7 +196,7 @@ flowchart TB
 
 อ่านที่ `origin/main` `f88cd5425b0e591cef6dc03f918a96e757615f25` (2026-11-04):
 
-- `pyproject.toml`, `Dockerfile`, `railway.toml`, `.github/workflows/check.yml`, `.github/workflows/shared-runtime.yml`, `DOCPACK/docpack.yaml`
+- `pyproject.toml`, `Dockerfile`, `.railway/railway.ts`, `.github/workflows/check.yml`, `.github/workflows/shared-runtime.yml`, `DOCPACK/docpack.yaml`
 - `src/platform_communication/__main__.py`, `app.py`, `store.py`, `worker.py`, `adapters.py`, `keys.py`, `migrations.py`, `_sentry.py`
 - `tests/test_build_hygiene.py`, `test_delivery_gate.py`, `runtime_tests/test_runtime.py`, `test_opt_out.py`, `test_sentry_boundary.py`
 - `docs/runtime.md`, `docs/diagrams/` (README, 05, 06, 07, 16, 08-adr/*)

@@ -10,7 +10,7 @@ repo ไม่มี deploy workflow; CI สร้าง image เพื่อ�
 
 ## Decision
 
-- `railway.toml`: builder `DOCKERFILE`, `healthcheckPath = "/readyz"`, timeout 30 s, restart `ON_FAILURE` max 3
+- `.railway/railway.ts`: builder `DOCKERFILE`, `healthcheckPath = "/readyz"`, timeout 30 s, restart `ON_FAILURE` max 3
 - Dockerfile สองชั้น, runtime เป็น UID/GID 65532, `CMD python -m platform_communication serve`, `PORT=8080`
 - service `communication-api-production` อยู่บน Railway region `asia-southeast1-eqsg3a` โดยเปิด sleep (serverless); deploy ด้วย `railway up --ci` จาก `git archive main` (ops record: book-platforms-status (2026-11-03), "Deploy recipe")
 - Neon free project แยกต่อ service; core pool รอ resume ได้ (pool wait 20 s, connect timeout 15 s)
@@ -22,4 +22,4 @@ repo ไม่มี deploy workflow; CI สร้าง image เพื่อ�
 
 ## Evidence
 
-`railway.toml`, `Dockerfile`, `.github/workflows/shared-runtime.yml`, `tests/test_build_hygiene.py`, `docs/runtime.md` "Container image", platform-backend-core `db.py` at `21d5f44`, ops record: book-platforms-status (2026-11-03)
+`.railway/railway.ts`, `Dockerfile`, `.github/workflows/shared-runtime.yml`, `tests/test_build_hygiene.py`, `docs/runtime.md` "Container image", platform-backend-core `db.py` at `21d5f44`, ops record: book-platforms-status (2026-11-03)

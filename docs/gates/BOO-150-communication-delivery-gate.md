@@ -34,7 +34,7 @@ module plus tests rather than testing runtime code. Open PR #1
 runtime (`src/platform_communication/adapters.py` with Resend/Twilio/FCM/Telegram adapters, a
 PostgreSQL `message_outbox` with `(workspace_id, event_key)` idempotency and lease/retry). This
 branch does not touch any file that PR changes (`README.md`, `.gitignore`, `src/`, `runtime_tests/`,
-`Dockerfile`, `pyproject.toml`, `railway.toml`, `docs/runtime.md`, `.github/workflows/shared-runtime.yml`),
+`Dockerfile`, `pyproject.toml`, `.railway/railway.ts`, `docs/runtime.md`, `.github/workflows/shared-runtime.yml`),
 so the doc is linked from `docs/CONTRACT-SURFACE.md` instead of the README. Neither PR #1's
 adapters nor its outbox enforce opt-out.
 

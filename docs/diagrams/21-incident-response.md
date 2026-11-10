@@ -25,7 +25,7 @@ flowchart TD
   ROLL --> PM
 ```
 
-Sources: `docs/runtime.md` ("Verification and release gate", "Outbox API and workers"), `railway.toml`, `src/platform_communication/store.py` (`ready`), `src/platform_communication/app.py`, ops record: book-platforms-status (2026-11-03) (uptime worker, Sentry project, deploy recipe, Neon resume behaviour)
+Sources: `docs/runtime.md` ("Verification and release gate", "Outbox API and workers"), `.railway/railway.ts`, `src/platform_communication/store.py` (`ready`), `src/platform_communication/app.py`, ops record: book-platforms-status (2026-11-03) (uptime worker, Sentry project, deploy recipe, Neon resume behaviour)
 
 ## Open questions
 

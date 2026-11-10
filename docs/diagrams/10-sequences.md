@@ -101,4 +101,4 @@ sequenceDiagram
   A-->>U: 200 ready or 503 unavailable
 ```
 
-Sources: `src/platform_communication/app.py`, `store.py`, `worker.py`, `adapters.py`, `keys.py`, `__main__.py`, platform-backend-core `http.py`, `auth.py`, `db.py` at `21d5f44`, `railway.toml`, ops record: book-platforms-status (2026-11-03) (uptime worker hourly `/readyz`)
+Sources: `src/platform_communication/app.py`, `store.py`, `worker.py`, `adapters.py`, `keys.py`, `__main__.py`, platform-backend-core `http.py`, `auth.py`, `db.py` at `21d5f44`, `.railway/railway.ts`, ops record: book-platforms-status (2026-11-03) (uptime worker hourly `/readyz`)

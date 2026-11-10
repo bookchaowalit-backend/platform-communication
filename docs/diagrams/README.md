@@ -15,22 +15,22 @@ repo นี้คือ central platform service `communication`: durable outbox
 | 03 | User flows (API call flows) | done | [03-user-flows.md](03-user-flows.md) | `app.py`, `store.py`, `keys.py`, `adapters.py`, `docs/runtime.md` |
 | 04 | Traceability (RTM) | done | [04-traceability.md](04-traceability.md) | BOO-150 gate, consumer contract, `docs/runtime.md`, `tests/`, `runtime_tests/`, workflows |
 | 05 | C4 Context | done | [05-c4-context.md](05-c4-context.md) | `adapters.py`, `_sentry.py`, `__main__.py`, ops record |
-| 06 | C4 Container | done | [06-c4-container.md](06-c4-container.md) | `Dockerfile`, `railway.toml`, `__main__.py`, core `db.py` |
+| 06 | C4 Container | done | [06-c4-container.md](06-c4-container.md) | `Dockerfile`, `.railway/railway.ts`, `__main__.py`, core `db.py` |
 | 07 | C4 Component | done | [07-c4-component.md](07-c4-component.md) | `src/platform_communication/*.py`, core `http.py`, `auth.py`, `db.py` |
-| 08 | ADRs | done (5) | [08-adr/](08-adr/) | git log, `store.py`, `migrations.py`, `keys.py`, `_sentry.py`, `railway.toml`, ops record |
+| 08 | ADRs | done (5) | [08-adr/](08-adr/) | git log, `store.py`, `migrations.py`, `keys.py`, `_sentry.py`, `.railway/railway.ts`, ops record |
 | 09 | ERD | done | [09-erd.md](09-erd.md) | `migrations.py`, `store.py`, core `migrations.py` |
 | 10 | Sequences | done (4) | [10-sequences.md](10-sequences.md) | `app.py`, `store.py`, `worker.py`, `keys.py`, core `http.py` |
 | 11 | State machines | done | [11-state-machines.md](11-state-machines.md) | `store.py`, `worker.py`, `migrations.py` |
 | 12 | API & integrations | done | [12-api-integration.md](12-api-integration.md) | `app.py`, `store.py`, `adapters.py`, core `http.py` |
-| 13 | Threat model | done | [13-threat-model.md](13-threat-model.md) | `src/`, core, `railway.toml`, `Dockerfile`, workflows |
+| 13 | Threat model | done | [13-threat-model.md](13-threat-model.md) | `src/`, core, `.railway/railway.ts`, `Dockerfile`, workflows |
 | 14 | Backup & DR | done (backup not found) | [14-backup-dr.md](14-backup-dr.md) | `docs/runtime.md`, `keys.py`, workflows, ops record |
 | 15 | CI/CD pipeline | done | [15-cicd-pipeline.md](15-cicd-pipeline.md) | `.github/workflows/*.yml`, platform-ci-workflows `ci-python.yml` / `security.yml` @ `87dc5e1c` |
-| 16 | Deployment | done | [16-deployment.md](16-deployment.md) | `railway.toml`, `Dockerfile`, `docs/runtime.md`, ops record |
+| 16 | Deployment | done | [16-deployment.md](16-deployment.md) | `.railway/railway.ts`, `Dockerfile`, `docs/runtime.md`, ops record |
 | 17 | Test coverage matrix | done | [17-test-coverage-matrix.md](17-test-coverage-matrix.md) | `tests/`, `runtime_tests/`, `pyproject.toml`, `check.yml` |
 | 18 | Git & release workflow | done | [18-git-release-workflow.md](18-git-release-workflow.md) | `git log --first-parent`, `gh pr list` |
 | 19 | Service dependency map | done | [19-service-dependency-map.md](19-service-dependency-map.md) | `src/`, `pyproject.toml`, `uv.lock`, `contract.json` |
-| 20 | Observability | done | [20-observability.md](20-observability.md) | `_sentry.py`, `__main__.py`, core `http.py`, `railway.toml`, ops record |
-| 21 | Incident response | done | [21-incident-response.md](21-incident-response.md) | `docs/runtime.md`, `railway.toml`, ops record |
+| 20 | Observability | done | [20-observability.md](20-observability.md) | `_sentry.py`, `__main__.py`, core `http.py`, `.railway/railway.ts`, ops record |
+| 21 | Incident response | done | [21-incident-response.md](21-incident-response.md) | `docs/runtime.md`, `.railway/railway.ts`, ops record |
 | 22 | DORA | done (proxies; production deploys not computable) | [22-dora.md](22-dora.md) | `git log`, `gh run list`, `gh pr list`, ops record |
 
 ## ADR list

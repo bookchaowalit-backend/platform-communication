@@ -26,7 +26,7 @@ flowchart LR
   UP["platform-uptime-worker hourly /readyz"] --> SVC
 ```
 
-Sources: `railway.toml`, `Dockerfile`, `src/platform_communication/__main__.py`, `docs/runtime.md` (Staging plan), ops record: book-platforms-status (2026-11-03) (service name `communication-api-production`, region, sleep, `/readyz` 200 ~0.4 s warm, Neon `platform-<svc>`, Infisical `/platform-<svc>`, Sentry `platform-<svc>`, identity issuer `https://identity-api-production-fad1.up.railway.app`, uptime worker, CLI deploy of `bea8412`)
+Sources: `.railway/railway.ts`, `Dockerfile`, `src/platform_communication/__main__.py`, `docs/runtime.md` (Staging plan), ops record: book-platforms-status (2026-11-03) (service name `communication-api-production`, region, sleep, `/readyz` 200 ~0.4 s warm, Neon `platform-<svc>`, Infisical `/platform-<svc>`, Sentry `platform-<svc>`, identity issuer `https://identity-api-production-fad1.up.railway.app`, uptime worker, CLI deploy of `bea8412`)
 
 | Endpoint | Purpose |
 |---|---|

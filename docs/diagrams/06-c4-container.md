@@ -29,7 +29,7 @@ C4Container
   Rel(api, sentry, "Errors")
 ```
 
-Sources: `Dockerfile`, `railway.toml`, `src/platform_communication/__main__.py`, `src/platform_communication/app.py`, `src/platform_communication/worker.py`, `src/platform_communication/adapters.py`, `src/platform_communication/_sentry.py`, `docs/runtime.md`, platform-backend-core `src/platform_backend_core/db.py`, `auth.py`, `migrations.py` at `21d5f44`, platform-api-gateway `routes.json` @ `4a31ff5`
+Sources: `Dockerfile`, `.railway/railway.ts`, `src/platform_communication/__main__.py`, `src/platform_communication/app.py`, `src/platform_communication/worker.py`, `src/platform_communication/adapters.py`, `src/platform_communication/_sentry.py`, `docs/runtime.md`, platform-backend-core `src/platform_backend_core/db.py`, `auth.py`, `migrations.py` at `21d5f44`, platform-api-gateway `routes.json` @ `4a31ff5`
 
 ## Open questions
 
