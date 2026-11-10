@@ -9,16 +9,18 @@ from .migrations import MIGRATIONS
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('command',choices=['serve','migrate','worker']);args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('command',choices=['serve','migrate','worker'])
+    p.add_argument('--until-empty',action='store_true',help='worker: drain due messages, then exit (for a scheduled job)')
+    args=p.parse_args()
     try:
         if args.command=='migrate':
             MigrationRunner(os.environ['DATABASE_URL'],namespace='communication').apply(MIGRATIONS)
             return
         if args.command=='worker':
             import signal
-            import time
             from uuid import UUID
 
+            from ._drain import drain
             from .adapters import configured_adapters
             from .store import OutboxStore
             from .worker import DeliveryWorker
@@ -32,9 +34,7 @@ def main():
                 nonlocal running
                 running=False
             signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
-            try:
-                while running:
-                    if not worker.run_one(workspace):time.sleep(0.5)
+            try:drain(worker,workspace,until_empty=args.until_empty,running=lambda:running)
             finally:database.close()
             return
         verifier=TokenVerifier(issuer=os.environ['JWT_ISSUER'],audience=os.environ['JWT_AUDIENCE'],public_key=os.environ.get('JWT_PUBLIC_KEY'),jwks_url=os.environ.get('JWT_JWKS_URL'))

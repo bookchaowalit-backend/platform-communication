@@ -109,6 +109,12 @@ Bound the process/replica count to the database pool budget. Default lease is
 finish requires matching unexpired lease token. Expired presend leases recover;
 expired sending becomes `uncertain`, because the send may already have happened.
 
+`worker --until-empty` drains every due message (at most 500 per run), then exits 0.
+Production runs it as the Railway cron service `communication-worker` every 30 minutes
+(`railway.worker.toml`), so a queued message waits at most ~30 minutes and the Neon database
+can scale to zero between runs. The default mode (no flag) keeps polling every 0.5 seconds;
+do not run it on the free Neon plan: it keeps compute awake (~182 CU-h/month vs 100).
+
 Delivery attempts are bounded with exponential delay capped at 3600 seconds.
 A known 429 rejection retries; 4xx permanent rejection becomes dead; redirects,
 5xx, malformed success, response >64 KiB, timeout or worker crash after marking
