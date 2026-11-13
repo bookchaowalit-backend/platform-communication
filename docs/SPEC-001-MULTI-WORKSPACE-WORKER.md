@@ -1,12 +1,12 @@
-# SPEC-003 — Delivery worker serves every workspace
+# SPEC-001 — Delivery worker serves every workspace
 
 Standard: ADR-0004 — TDD + SDD.
 
 | Field | Value |
 |---|---|
-| Spec ID / version | SPEC-003 / 0.1 |
+| Spec ID / version | SPEC-001 / 0.1 |
 | Status | **draft**, waiting for owner approval |
-| Repository / path | bookchaowalit-backend/platform-communication / `docs/SPEC-003-MULTI-WORKSPACE-WORKER.md` |
+| Repository / path | bookchaowalit-backend/platform-communication / `docs/SPEC-001-MULTI-WORKSPACE-WORKER.md` |
 | Owner (maker) | Claude Code |
 | Approver | Owner (bookchaowalit) |
 | Requirement links | SaaS gap review 2026-11-11, item 2 (workers pinned to one workspace); platform-identity SPEC-006 (tenants now exist) |
