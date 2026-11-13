@@ -4,8 +4,8 @@ Standard: ADR-0004 — TDD + SDD.
 
 | Field | Value |
 |---|---|
-| Spec ID / version | SPEC-001 / 0.1 |
-| Status | **draft**, waiting for owner approval |
+| Spec ID / version | SPEC-001 / 0.2 |
+| Status | **in review**: checker R1 revise (4 P1, 4 P2, 2 P3) → 0.2; waiting for R2, then owner approval |
 | Repository / path | bookchaowalit-backend/platform-communication / `docs/SPEC-001-MULTI-WORKSPACE-WORKER.md` |
 | Owner (maker) | Claude Code |
 | Approver | Owner (bookchaowalit) |
@@ -72,9 +72,49 @@ Standard: ADR-0004 — TDD + SDD.
 
 Runtime tests against a throwaway `postgres:17-alpine`, as the real runtime role, red first.
 
+## 6a. Design decisions (0.2, checker R1)
+
+- **D1 — owner role provisioned out of band.** `communication_discovery` (NOLOGIN, NOSUPERUSER, NOBYPASSRLS,
+  NOINHERIT) is created by the role provisioning step, the same way `communication_runtime` is today
+  (`docs/runtime.md` checklist gets the step). The migration does not `CREATE ROLE`. It checks that the role
+  exists and stops with a clear error otherwise. Then it creates the function, sets ACLs (`REVOKE ALL FROM
+  PUBLIC`, `GRANT EXECUTE TO communication_runtime`), and runs `ALTER FUNCTION … OWNER TO
+  communication_discovery`, in that order, because a revoke by a non-owner is a no-op.
+- **D2 — narrow read path.** The owner role gets `SELECT (workspace_id, status, run_at, lease_until, attempts,
+  max_attempts, recipient_hash, channel, updated_at)` on `message_outbox` only. It gets no access to recipient,
+  subject or body, and no INSERT/UPDATE/DELETE. It also gets one policy `FOR SELECT TO communication_discovery
+  USING (true)`. `message_opt_out` gets the same column-limited treatment if the predicate needs it.
+- **D3 — the predicate mirrors `claim()`.** A workspace is due when it has a row with `attempts < max_attempts`
+  and either `status='queued' AND run_at <= now()`, or `status IN ('leased','sending') AND lease_until <= now()`
+  (recovery of a crashed run). A workspace is also due when it has terminal rows past retention that still hold
+  content. `p_limit` is clamped to 1..200 inside the function. Order is by oldest due work (`min(run_at)`),
+  never by id, so no workspace is pinned out.
+- **D4 — result contract.** `scheduled_run_all` returns `(handled, failed_workspaces)`. Each workspace runs in
+  its own try/except. A failure logs only the exception class and a counter, never a workspace id or a DB
+  message. The heartbeat is `send(ok=failed_workspaces == 0, handled)`, and the process exits non-zero when
+  `failed_workspaces > 0` after every workspace was tried. SIGTERM stops after the current message and counts as
+  ok for workspaces finished, with no new workspace started.
+- **D5 — rollback.** With `COMMUNICATION_WORKSPACE_ID` set, discovery is not called; a malformed UUID still
+  fails at start-up as today. The function stays in place and is harmless when unused.
+
+### Added scenarios
+
+- **AC-07 — No workspaces.** Discovery returns nothing: exit 0, heartbeat ok with 0, no adapter call.
+- **AC-08 — Lease recovery.** A `leased` row whose lease expired in W2 is discovered and delivered by the next run.
+- **AC-09 — Exhausted rows are not rediscovered.** A workspace whose only rows have `attempts = max_attempts`
+  is not returned.
+- **AC-10 — Concurrent runs.** Two overlapping runs deliver each message once (`FOR UPDATE SKIP LOCKED`), and
+  neither fails.
+- **AC-11 — Rotation.** With more due workspaces than `p_limit`, the oldest-due ones go first, and the rest are
+  served by the next run.
+- **AC-12 — Discovery role cannot write or read content.** As `communication_discovery`, INSERT, UPDATE and
+  SELECT body all fail. `communication_runtime` still cannot read another workspace's rows directly.
+- **AC-13 — Logs carry no ids.** A captured log of a run with a failing workspace contains no UUID.
+
 ## 7. Open questions
 
 | # | Question | Owner |
 |---|---|---|
 | 1 | Default per-workspace batch: 100 (proposed) | Owner |
 | 2 | Remove `COMMUNICATION_WORKSPACE_ID` from Railway at deploy, or keep it until a second customer exists | Owner |
+| 3 | Run time: about 500 messages × provider latency per run, far below the 30-minute cron interval; Railway does not start a cron run while one is still running | — |
