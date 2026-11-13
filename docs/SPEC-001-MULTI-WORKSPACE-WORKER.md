@@ -5,7 +5,7 @@ Standard: ADR-0004 — TDD + SDD.
 | Field | Value |
 |---|---|
 | Spec ID / version | SPEC-001 / 0.3 |
-| Status | **in review**: checker R1 revise → 0.2; R2 revise (2 P1) → 0.3; waiting for R3, then owner approval |
+| Status | **in review**: checker R1 revise → 0.2; R2 revise (2 P1) → 0.3; **R3 pass**; waiting for owner approval |
 | Repository / path | bookchaowalit-backend/platform-communication / `docs/SPEC-001-MULTI-WORKSPACE-WORKER.md` |
 | Owner (maker) | Claude Code |
 | Approver | Owner (bookchaowalit) |
@@ -114,7 +114,13 @@ Runtime tests against a throwaway `postgres:17-alpine`, as the real runtime role
   served by the next run.
 - **AC-12 — Discovery role cannot write or read content.** As `communication_discovery`, INSERT, UPDATE and
   SELECT body all fail. `communication_runtime` still cannot read another workspace's rows directly.
+- **AC-14 — `has_content` tracks content.** True for a body-only row and for a subject-only row. False after
+  `redact_terminal`, so a retention-only workspace is not rediscovered.
 - **AC-13 — Logs carry no ids.** A captured log of a run with a failing workspace contains no UUID.
+
+Deploy note (R3): `ADD COLUMN … GENERATED … STORED` rewrites `message_outbox` under an ACCESS EXCLUSIVE lock. That
+is brief at today's size. Run the migration before merging (deploys do not migrate). A SIGTERM-cut run alerts by
+design (D4); accept the rare deploy-time alert.
 
 ## 7. Open questions
 
