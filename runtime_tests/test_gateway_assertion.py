@@ -266,6 +266,13 @@ def test_main_installs_the_check_with_the_route_key():
 SYSTEM_FOR_ADDON = "addon-test"
 
 
+def test_the_unsubscribe_link_stays_open_and_nothing_else_under_it():
+    """Recipients open it from an email; its one-time token, not the gateway, authenticates it."""
+    assert gw.is_open("/v1/unsubscribe")
+    for path in ("/v1/unsubscribe/x", "/v1/unsubscribes", "/v1/messages", "/v1/preferences"):
+        assert not gw.is_open(path), path
+
+
 def test_probe_paths_and_a_trailing_slash_stay_open():
     for path in ("/health", "/healthz", "/ready", "/readyz", "/health/", "/healthz/", "/.well-known/jwks.json"):
         assert gw.is_open(path), path

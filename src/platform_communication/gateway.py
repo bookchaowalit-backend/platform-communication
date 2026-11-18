@@ -40,6 +40,9 @@ OPEN_PATHS = (
     "/readyz",
     "/openapi.json",
     "/.well-known/",
+    # Email recipients open the unsubscribe link from COMMUNICATION_PUBLIC_URL themselves and cannot pass
+    # the gateway (no bearer token); the one-time token in the query authenticates them. Exact path only.
+    "/v1/unsubscribe",
 )
 # A body the header says to wait for must arrive within this, or the request is "invalid" (a client that
 # sends a well-formed header and then stalls cannot hold the connection).
